@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2018 Roberto Alsina and others.
+# Copyright © 2012-2020 Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -26,13 +26,10 @@
 
 """Utility functions."""
 
-import babel.dates
 import configparser
 import datetime
-import dateutil.tz
 import hashlib
 import io
-import logging
 import operator
 import os
 import re
@@ -41,59 +38,58 @@ import shutil
 import socket
 import subprocess
 import sys
+import threading
+import typing
+from collections import defaultdict, OrderedDict
+from collections.abc import Callable, Iterable
+from html import unescape as html_unescape
+from importlib import reload as _reload
+from unicodedata import normalize as unicodenormalize
+from urllib.parse import quote as urlquote
+from urllib.parse import unquote as urlunquote
+from urllib.parse import urlparse, urlunparse
+from zipfile import ZipFile as zipf
+
+import babel.dates
 import dateutil.parser
 import dateutil.tz
-import logbook
-try:
-    from urllib import quote as urlquote
-    from urllib import unquote as urlunquote
-    from urlparse import urlparse, urlunparse
-except ImportError:
-    from urllib.parse import quote as urlquote  # NOQA
-    from urllib.parse import unquote as urlunquote  # NOQA
-    from urllib.parse import urlparse, urlunparse  # NOQA
-import warnings
+import pygments.formatters
+import pygments.formatters._mapping
 import PyRSS2Gen as rss
+from blinker import signal
+from doit import tools
+from doit.cmdparse import CmdParse
+from pkg_resources import resource_filename
+from nikola.packages.pygments_better_html import BetterHtmlFormatter
+from unidecode import unidecode
+
+# Renames
+from nikola import DEBUG  # NOQA
+from .log import LOGGER, get_logger  # NOQA
+from .hierarchy_utils import TreeNode, clone_treenode, flatten_tree_structure, sort_classifications
+from .hierarchy_utils import join_hierarchical_category_path, parse_escaped_hierarchical_category_name
+
 try:
     import toml
 except ImportError:
     toml = None
+
 try:
-    import yaml
+    from ruamel.yaml import YAML
 except ImportError:
-    yaml = None
+    YAML = None
+
 try:
     import husl
 except ImportError:
     husl = None
 
-try:
-    import typing  # NOQA
-    import typing.re  # NOQA
-except ImportError:
-    pass
-
-from blinker import signal
-from collections import defaultdict, Callable, OrderedDict, Iterable
-from importlib import reload as _reload
-from logbook.compat import redirect_logging
-from logbook.more import ExceptionHandler, ColorizedStderrHandler
-from pygments.formatters import HtmlFormatter
-from zipfile import ZipFile as zipf
-from doit import tools
-from unidecode import unidecode
-from unicodedata import normalize as unicodenormalize
-from pkg_resources import resource_filename
-from doit.cmdparse import CmdParse
-
-from nikola import DEBUG
-
 __all__ = ('CustomEncoder', 'get_theme_path', 'get_theme_path_real',
            'get_theme_chain', 'load_messages', 'copy_tree', 'copy_file',
            'slugify', 'unslugify', 'to_datetime', 'apply_filters',
            'config_changed', 'get_crumbs', 'get_tzname', 'get_asset_path',
-           '_reload', 'unicode_str', 'bytes_str', 'unichr', 'Functionary',
-           'TranslatableSetting', 'TemplateHookRegistry', 'LocaleBorg',
+           '_reload', 'Functionary', 'TranslatableSetting',
+           'TemplateHookRegistry', 'LocaleBorg',
            'sys_encode', 'sys_decode', 'makedirs', 'get_parent_theme_name',
            'demote_headers', 'get_translation_candidate', 'write_metadata',
            'ask', 'ask_yesno', 'options2docstring', 'os_path_split',
@@ -107,68 +103,21 @@ __all__ = ('CustomEncoder', 'get_theme_path', 'get_theme_path_real',
            'sort_classifications', 'join_hierarchical_category_path',
            'parse_escaped_hierarchical_category_name',)
 
-from .hierarchy_utils import TreeNode, clone_treenode, flatten_tree_structure, sort_classifications
-from .hierarchy_utils import join_hierarchical_category_path, parse_escaped_hierarchical_category_name
-
 # Are you looking for 'generic_rss_renderer'?
 # It's defined in nikola.nikola.Nikola (the site object).
 
 # Aliases, previously for Python 2/3 compatibility.
+# TODO remove in v9
 bytes_str = bytes
 unicode_str = str
 unichr = chr
 
+# For compatibility with old logging setups.
+# TODO remove in v9?
+STDERR_HANDLER = None
 
-class ApplicationWarning(Exception):
-    pass
-
-
-class ColorfulStderrHandler(ColorizedStderrHandler):
-    """Stream handler with colors."""
-
-    _colorful = False
-
-    def should_colorize(self, record):
-        """Inform about colorization using the value obtained from Nikola."""
-        return self._colorful
-
-
-def get_logger(name, handlers=None):
-    """Get a logger with handlers attached."""
-    l = logbook.Logger(name)
-    l.handlers += STDERR_HANDLER
-    return l
-
-
-STDERR_HANDLER = [ColorfulStderrHandler(
-    level=logbook.INFO if not DEBUG else logbook.DEBUG,
-    format_string=u'[{record.time:%Y-%m-%dT%H:%M:%SZ}] {record.level_name}: {record.channel}: {record.message}'
-)]
-
-
-LOGGER = get_logger('Nikola')
-STRICT_HANDLER = ExceptionHandler(ApplicationWarning, level='WARNING')
 
 USE_SLUGIFY = True
-
-redirect_logging()
-
-if DEBUG:
-    logging.basicConfig(level=logging.DEBUG)
-else:
-    logging.basicConfig(level=logging.INFO)
-
-
-def showwarning(message, category, filename, lineno, file=None, line=None):
-    """Show a warning (from the warnings module) to the user."""
-    try:
-        n = category.__name__
-    except AttributeError:
-        n = str(category)
-    get_logger(n).warn('{0}:{1}: {2}'.format(filename, lineno, message))
-
-
-warnings.showwarning = showwarning
 
 
 def req_missing(names, purpose, python=True, optional=False):
@@ -208,7 +157,7 @@ def req_missing(names, purpose, python=True, optional=False):
             purpose, pnames, whatarethey_p)
 
     if optional:
-        LOGGER.warn(msg)
+        LOGGER.warning(msg)
     else:
         LOGGER.error(msg)
         LOGGER.error('Exiting due to missing dependencies.')
@@ -222,14 +171,14 @@ ENCODING = sys.getfilesystemencoding() or sys.stdin.encoding
 
 def sys_encode(thing):
     """Return bytes encoded in the system's encoding."""
-    if isinstance(thing, unicode_str):
+    if isinstance(thing, str):
         return thing.encode(ENCODING)
     return thing
 
 
 def sys_decode(thing):
     """Return Unicode."""
-    if isinstance(thing, bytes_str):
+    if isinstance(thing, bytes):
         return thing.decode(ENCODING)
     return thing
 
@@ -257,7 +206,7 @@ class Functionary(defaultdict):
 
     def __init__(self, default, default_lang):
         """Initialize a functionary."""
-        super(Functionary, self).__init__(default)
+        super().__init__(default)
         self.default_lang = default_lang
 
     def __call__(self, key, lang=None):
@@ -294,7 +243,7 @@ class TranslatableSetting(object):
     def __getattribute__(self, attr):
         """Return attributes, falling back to string attributes."""
         try:
-            return super(TranslatableSetting, self).__getattribute__(attr)
+            return super().__getattribute__(attr)
         except AttributeError:
             return self().__getattribute__(attr)
 
@@ -539,10 +488,12 @@ class CustomEncoder(json.JSONEncoder):
     def default(self, obj):
         """Create default encoding handler."""
         try:
-            return super(CustomEncoder, self).default(obj)
+            return super().default(obj)
         except TypeError:
             if isinstance(obj, (set, frozenset)):
                 return self.encode(sorted(list(obj)))
+            elif isinstance(obj, TranslatableSetting):
+                s = json.dumps(obj._inp, cls=CustomEncoder, sort_keys=True)
             else:
                 s = repr(obj).split('0x', 1)[0]
             return s
@@ -553,10 +504,33 @@ class config_changed(tools.config_changed):
 
     def __init__(self, config, identifier=None):
         """Initialize config_changed."""
-        super(config_changed, self).__init__(config)
+        super().__init__(config)
         self.identifier = '_config_changed'
         if identifier is not None:
             self.identifier += ':' + identifier
+
+    # DEBUG (for unexpected rebuilds)
+    @classmethod
+    def _write_into_debug_db(cls, digest: str, data: str) -> None:  # pragma: no cover
+        """Write full values of config_changed into a sqlite3 database."""
+        import sqlite3
+        try:
+            cls.debug_db_cursor
+        except AttributeError:
+            cls.debug_db_conn = sqlite3.connect("cc_debug.sqlite3")
+            cls.debug_db_id = datetime.datetime.now().isoformat()
+            cls.debug_db_cursor = cls.debug_db_conn.cursor()
+            cls.debug_db_cursor.execute("""
+            CREATE TABLE IF NOT EXISTS hashes (hash CHARACTER(32) PRIMARY KEY, json_data TEXT);
+            """)
+            cls.debug_db_conn.commit()
+
+        try:
+            cls.debug_db_cursor.execute("INSERT INTO hashes (hash, json_data) VALUES (?, ?);", (digest, data))
+            cls.debug_db_conn.commit()
+        except sqlite3.IntegrityError:
+            # ON CONFLICT DO NOTHING, except Ubuntu 16.04’s sqlite3 is too ancient for this
+            cls.debug_db_conn.rollback()
 
     def _calc_digest(self):
         """Calculate a config_changed digest."""
@@ -569,9 +543,14 @@ class config_changed(tools.config_changed):
             else:
                 byte_data = data
             digest = hashlib.md5(byte_data).hexdigest()
+
+            # DEBUG (for unexpected rebuilds)
+            # self._write_into_debug_db(digest, data)
+            # Alternative (without database):
             # LOGGER.debug('{{"{0}": {1}}}'.format(digest, byte_data))
             # Humanized format:
             # LOGGER.debug('[Digest {0} for {2}]\n{1}\n[Digest {0} for {2}]'.format(digest, byte_data, self.identifier))
+
             return digest
         else:
             raise Exception('Invalid type of config_changed parameter -- got '
@@ -738,7 +717,7 @@ def load_messages(themes, translations, default_lang, themes_dirs):
         raise LanguageNotFoundError(lang, last_exception)
     for lang, status in completion_status.items():
         if not status and lang not in INCOMPLETE_LANGUAGES_WARNED:
-            LOGGER.warn("Incomplete translation for language '{0}'.".format(lang))
+            LOGGER.warning("Incomplete translation for language '{0}'.".format(lang))
             INCOMPLETE_LANGUAGES_WARNED.add(lang)
 
     return messages
@@ -833,12 +812,12 @@ def slugify(value, lang=None, force=False):
     >>> print(slugify('foo bar', lang='en'))
     foo-bar
     """
-    if not isinstance(value, unicode_str):
+    if not isinstance(value, str):
         raise ValueError("Not a unicode object: {0}".format(value))
     if USE_SLUGIFY or force:
         # This is the standard state of slugify, which actually does some work.
         # It is the preferred style, especially for Western languages.
-        value = unicode_str(unidecode(value))
+        value = str(unidecode(value))
         value = _slugify_strip_re.sub('', value).strip().lower()
         return _slugify_hyphenate_re.sub('-', value)
     else:
@@ -882,6 +861,16 @@ def encodelink(iri):
     encoded_link = urlunparse(link.values())
     return encoded_link
 
+
+def full_path_from_urlparse(parsed) -> str:
+    """Given urlparse output, return the full path (with query and fragment)."""
+    dst = parsed.path
+    if parsed.query:
+        dst = "{0}?{1}".format(dst, parsed.query)
+    if parsed.fragment:
+        dst = "{0}#{1}".format(dst, parsed.fragment)
+    return dst
+
 # A very slightly safer version of zip.extractall that works on
 # python < 2.6
 
@@ -915,6 +904,8 @@ def extract_all(zipfile, path='themes'):
 def to_datetime(value, tzinfo=None):
     """Convert string to datetime."""
     try:
+        if type(value) == datetime.date:
+            value = datetime.datetime.combine(value, datetime.time(0, 0))
         if not isinstance(value, datetime.datetime):
             # dateutil does bad things with TZs like UTC-03:00.
             dateregexp = re.compile(r' UTC([+-][0-9][0-9]:[0-9][0-9])')
@@ -966,7 +957,7 @@ def apply_filters(task, filters, skip_ext=None):
             if isinstance(key, (tuple, list)):
                 if ext in key:
                     return value
-            elif isinstance(key, (bytes_str, unicode_str)):
+            elif isinstance(key, (bytes, str)):
                 if ext == key:
                     return value
             else:
@@ -1100,7 +1091,42 @@ class LocaleBorgUninitializedException(Exception):
 
     def __init__(self):
         """Initialize exception."""
-        super(LocaleBorgUninitializedException, self).__init__("Attempt to use LocaleBorg before initialization")
+        super().__init__("Attempt to use LocaleBorg before initialization")
+
+
+# Customized versions of babel.dates functions that don't do weird stuff with
+# timezones. Without these fixes, DST would follow local settings (because
+# dateutil’s timezones return stuff depending on their input, and datetime.time
+# objects have no year/month/day to base the information on.
+def format_datetime(datetime=None, format='medium',
+                    locale=babel.dates.LC_TIME):
+    """Format a datetime object."""
+    locale = babel.dates.Locale.parse(locale)
+    if format in ('full', 'long', 'medium', 'short'):
+        return babel.dates.get_datetime_format(format, locale=locale) \
+            .replace("'", "") \
+            .replace('{0}', format_time(datetime, format, locale=locale)) \
+            .replace('{1}', babel.dates.format_date(datetime, format, locale=locale))
+    else:
+        return babel.dates.parse_pattern(format).apply(datetime, locale)
+
+
+def format_time(time=None, format='medium', locale=babel.dates.LC_TIME):
+    """Format time. Input can be datetime.time or datetime.datetime."""
+    locale = babel.dates.Locale.parse(locale)
+    if format in ('full', 'long', 'medium', 'short'):
+        format = babel.dates.get_time_format(format, locale=locale)
+    return babel.dates.parse_pattern(format).apply(time, locale)
+
+
+def format_skeleton(skeleton, datetime=None, fo=None, fuzzy=True,
+                    locale=babel.dates.LC_TIME):
+    """Format a datetime based on a skeleton."""
+    locale = babel.dates.Locale.parse(locale)
+    if fuzzy and skeleton not in locale.datetime_skeletons:
+        skeleton = babel.dates.match_skeleton(skeleton, locale.datetime_skeletons)
+    format = locale.datetime_skeletons[skeleton]
+    return format_datetime(datetime, format, locale)
 
 
 class LocaleBorg(object):
@@ -1163,7 +1189,6 @@ class LocaleBorg(object):
 
         Used in testing to prevent leaking state between tests.
         """
-        import threading
         cls.__thread_local = threading.local()
         cls.__thread_lock = threading.Lock()
 
@@ -1208,7 +1233,7 @@ class LocaleBorg(object):
         elif LocaleBorg.datetime_formatter is not None:
             return LocaleBorg.datetime_formatter(date, date_format, lang, locale)
         else:
-            return babel.dates.format_datetime(date, date_format, locale=locale)
+            return format_datetime(date, date_format, locale=locale)
 
     def format_date_in_string(self, message: str, date: datetime.date, lang: 'typing.Optional[str]' = None) -> str:
         """Format date inside a string (message).
@@ -1226,7 +1251,7 @@ class LocaleBorg(object):
             lang = self.current_lang
         locale = self.locales.get(lang, lang)
 
-        def date_formatter(match: 'typing.re.Match') -> str:
+        def date_formatter(match: typing.Match) -> str:
             """Format a date as requested."""
             mode, custom_format = match.groups()
             if LocaleBorg.in_string_formatter is not None:
@@ -1236,7 +1261,7 @@ class LocaleBorg(object):
             else:
                 function, fmt = modes[mode]
                 if function == 'skeleton':
-                    return babel.dates.format_skeleton(fmt, date, locale=locale)
+                    return format_skeleton(fmt, date, locale=locale)
                 else:
                     return babel.dates.format_date(date, fmt, locale)
 
@@ -1313,14 +1338,27 @@ def demote_headers(doc, level=1):
     if level == 0:
         return doc
     elif level > 0:
-        r = range(1, 7 - level)
+        levels = range(1, 7 - (level - 1))
+        levels = reversed(levels)
     elif level < 0:
-        r = range(1 + level, 7)
-    for i in reversed(r):
-        # html headers go to 6, so we can’t “lower” beneath five
-        elements = doc.xpath('//h' + str(i))
-        for e in elements:
-            e.tag = 'h' + str(i + level)
+        levels = range(2 + level, 7)
+
+    for before in levels:
+        after = before + level
+        if after < 1:
+            # html headers can't go lower than 1
+            after = 1
+        elif after > 6:
+            # html headers go until 6
+            after = 6
+
+        if before == after:
+            continue
+
+        elements = doc.xpath('//h{}'.format(before))
+        new_tag = 'h{}'.format(after)
+        for element in elements:
+            element.tag = new_tag
 
 
 def get_root_dir():
@@ -1436,9 +1474,9 @@ def write_metadata(data, metadata_format=None, comment_wrap=False, site=None, co
         extractor.check_requirements()
         return extractor.write_metadata(data, comment_wrap)
     elif extractor and metadata_format not in default_meta:
-        LOGGER.warn('Writing METADATA_FORMAT {} is not supported, using "nikola" format'.format(metadata_format))
+        LOGGER.warning('Writing METADATA_FORMAT {} is not supported, using "nikola" format'.format(metadata_format))
     elif metadata_format not in default_meta:
-        LOGGER.warn('Unknown METADATA_FORMAT {}, using "nikola" format'.format(metadata_format))
+        LOGGER.warning('Unknown METADATA_FORMAT {}, using "nikola" format'.format(metadata_format))
 
     if metadata_format == 'rest_docinfo':
         title = data['title']
@@ -1589,17 +1627,27 @@ def options2docstring(name, options):
     return '\n'.join(result)
 
 
-class NikolaPygmentsHTML(HtmlFormatter):
+class NikolaPygmentsHTML(BetterHtmlFormatter):
     """A Nikola-specific modification of Pygments' HtmlFormatter."""
 
-    def __init__(self, anchor_ref, classes=None, linenos='table', linenostart=1):
+    def __init__(self, anchor_ref=None, classes=None, **kwargs):
         """Initialize formatter."""
         if classes is None:
             classes = ['code', 'literal-block']
+        if anchor_ref:
+            kwargs['lineanchors'] = slugify(
+                anchor_ref, lang=LocaleBorg().current_lang, force=True)
         self.nclasses = classes
-        super(NikolaPygmentsHTML, self).__init__(
-            cssclass='code', linenos=linenos, linenostart=linenostart, nowrap=False,
-            lineanchors=slugify(anchor_ref, lang=LocaleBorg().current_lang, force=True), anchorlinenos=True)
+        kwargs['cssclass'] = 'code'
+        if not kwargs.get('linenos'):
+            # Default to no line numbers (Issue #3426)
+            kwargs['linenos'] = False
+        if kwargs.get('linenos') not in {'table', 'inline', 'ol', False}:
+            # Map invalid values to table
+            kwargs['linenos'] = 'table'
+        kwargs['anchorlinenos'] = kwargs['linenos'] == 'table'
+        kwargs['nowrap'] = False
+        super().__init__(**kwargs)
 
     def wrap(self, source, outfile):
         """Wrap the ``source``, which is a generator yielding individual lines, in custom generators."""
@@ -1615,6 +1663,10 @@ class NikolaPygmentsHTML(HtmlFormatter):
         for tup in source:
             yield tup
         yield 0, '</pre>'
+
+
+# For consistency, override the default formatter.
+pygments.formatters._formatter_cache['HTML'] = NikolaPygmentsHTML
 
 
 def get_displayed_page_number(i, num_pages, site):
@@ -1642,7 +1694,7 @@ def adjust_name_for_index_path_list(path_list, i, displayed_i, lang, site, force
             path_list.append(index_file)
         if site.config["PRETTY_URLS"] and site.config["INDEXES_PRETTY_PAGE_URL"](lang) and path_list[-1] == index_file:
             path_schema = site.config["INDEXES_PRETTY_PAGE_URL"](lang)
-            if isinstance(path_schema, (bytes_str, unicode_str)):
+            if isinstance(path_schema, (bytes, str)):
                 path_schema = [path_schema]
         else:
             path_schema = None
@@ -1833,7 +1885,7 @@ def smartjoin(join_char: str, string_or_iterable) -> str:
     >>> smartjoin(' to ', ['count', 42])
     'count to 42'
     """
-    if isinstance(string_or_iterable, (unicode_str, bytes_str)):
+    if isinstance(string_or_iterable, (str, bytes)):
         return string_or_iterable
     elif isinstance(string_or_iterable, Iterable):
         return join_char.join([str(e) for e in string_or_iterable])
@@ -1872,11 +1924,11 @@ def load_data(path):
     loader = None
     function = 'load'
     if ext in {'.yml', '.yaml'}:
-        loader = yaml
-        function = 'safe_load'
-        if yaml is None:
-            req_missing(['yaml'], 'use YAML data files')
+        if YAML is None:
+            req_missing(['ruamel.yaml'], 'use YAML data files')
             return {}
+        loader = YAML(typ='safe')
+        function = 'load'
     elif ext in {'.json', '.js'}:
         loader = json
     elif ext in {'.toml', '.tml'}:
@@ -1886,21 +1938,8 @@ def load_data(path):
         loader = toml
     if loader is None:
         return
-    with io.open(path, 'r', encoding='utf8') as inf:
+    with io.open(path, 'r', encoding='utf-8-sig') as inf:
         return getattr(loader, function)(inf)
-
-
-# see http://stackoverflow.com/a/2087433
-try:
-    import html  # Python 3.4 and newer
-    html_unescape = html.unescape
-except (AttributeError, ImportError):
-    from html.parser import HTMLParser  # Python 3.4 and older
-
-    def html_unescape(s):
-        """Convert all named and numeric character references in the string s to the corresponding unicode characters."""
-        h = HTMLParser()
-        return h.unescape(s)
 
 
 def rss_writer(rss_obj, output_path):
@@ -1909,7 +1948,7 @@ def rss_writer(rss_obj, output_path):
     makedirs(dst_dir)
     with io.open(output_path, "w+", encoding="utf-8") as rss_file:
         data = rss_obj.to_xml(encoding='utf-8')
-        if isinstance(data, bytes_str):
+        if isinstance(data, bytes):
             data = data.decode('utf-8')
         rss_file.write(data)
 

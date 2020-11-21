@@ -5,10 +5,11 @@ import sys
 import shutil
 from setuptools import setup, find_packages
 from setuptools.command.install import install
+from setuptools.command.build_py import build_py
 
 
 with open('requirements.txt', 'r') as fh:
-    dependencies = [l.strip() for l in fh]
+    dependencies = [l.strip().split("#")[0] for l in fh]
 
 extras = {}
 
@@ -23,8 +24,8 @@ with open('requirements-tests.txt', 'r') as fh:
 # ########## platform specific stuff #############
 if sys.version_info[0] == 2:
     raise Exception('Python 2 is not supported')
-elif sys.version_info[0] == 3 and sys.version_info[1] < 4:
-    raise Exception('Python 3 version < 3.4 is not supported')
+elif sys.version_info[0] == 3 and sys.version_info[1] < 5:
+    raise Exception('Python 3 version < 3.5 is not supported')
 
 ##################################################
 
@@ -33,6 +34,9 @@ elif sys.version_info[0] == 3 and sys.version_info[1] < 4:
 standard_exclude = ('*.pyc', '*$py.class', '*~', '.*', '*.bak')
 standard_exclude_directories = ('.*', 'CVS', '_darcs', './build',
                                 './dist', 'EGG-INFO', '*.egg-info')
+
+with open('README.rst') as f:
+    long_description = f.read()
 
 
 def copy_messages():
@@ -95,17 +99,23 @@ class nikola_install(install):
         install.run(self)
 
 
+class nikola_build_py(build_py):
+    def run(self):
+        expands_symlinks_for_windows()
+        build_py.run(self)
+
+
 setup(name='Nikola',
-      version='8.0.0rc1',
+      version='8.1.2',
       description='A modular, fast, simple, static website and blog generator',
-      long_description=open('README.rst').read(),
+      long_description=long_description,
       author='Roberto Alsina and others',
       author_email='ralsina@netmanagers.com.ar',
       url='https://getnikola.com/',
-      packages=find_packages(exclude=('tests',)),
+      packages=find_packages(exclude=('tests', 'tests.*')),
       license='MIT',
       keywords='website, blog, static',
-      classifiers=('Development Status :: 5 - Production/Stable',
+      classifiers=['Development Status :: 5 - Production/Stable',
                    'Environment :: Console',
                    'Environment :: Plugins',
                    'Environment :: Web Environment',
@@ -118,17 +128,18 @@ setup(name='Nikola',
                    'Operating System :: POSIX',
                    'Operating System :: Unix',
                    'Programming Language :: Python',
-                   'Programming Language :: Python :: 3.4',
                    'Programming Language :: Python :: 3.5',
                    'Programming Language :: Python :: 3.6',
+                   'Programming Language :: Python :: 3.7',
+                   'Programming Language :: Python :: 3.8',
                    'Topic :: Internet',
                    'Topic :: Internet :: WWW/HTTP',
-                   'Topic :: Text Processing :: Markup'),
+                   'Topic :: Text Processing :: Markup'],
       install_requires=dependencies,
       extras_require=extras,
       include_package_data=True,
-      python_requires='>=3.4',
-      cmdclass={'install': nikola_install},
+      python_requires='>=3.5',
+      cmdclass={'install': nikola_install, 'build_py': nikola_build_py},
       data_files=[
               ('share/doc/nikola', [
                'docs/manual.rst',

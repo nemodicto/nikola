@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2018 Roberto Alsina and others.
+# Copyright © 2012-2020 Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -26,15 +26,13 @@
 
 """Deploy site."""
 
-import io
-from datetime import datetime
-from dateutil.tz import gettz
-import dateutil
-import os
 import subprocess
 import time
+from datetime import datetime
 
+import dateutil
 from blinker import signal
+from dateutil.tz import gettz
 
 from nikola.plugin_categories import Command
 from nikola.utils import clean_before_deployment
@@ -51,44 +49,25 @@ class CommandDeploy(Command):
 
     def _execute(self, command, args):
         """Execute the deploy command."""
-        # Get last successful deploy date
-        timestamp_path = os.path.join(self.site.config['CACHE_FOLDER'], 'lastdeploy')
-
         # Get last-deploy from persistent state
         last_deploy = self.site.state.get('last_deploy')
-        if last_deploy is None:
-            # If there is a last-deploy saved, move it to the new state persistence thing
-            # FIXME: remove in Nikola 8
-            if os.path.isfile(timestamp_path):
-                try:
-                    with io.open(timestamp_path, 'r', encoding='utf8') as inf:
-                        last_deploy = dateutil.parser.parse(inf.read())
-                        clean = False
-                except (IOError, Exception) as e:
-                    self.logger.debug("Problem when reading `{0}`: {1}".format(timestamp_path, e))
-                    last_deploy = datetime(1970, 1, 1)
-                    clean = True
-                os.unlink(timestamp_path)  # Remove because from now on it's in state
-            else:  # Just a default
-                last_deploy = datetime(1970, 1, 1)
-                clean = True
-        else:
+        if last_deploy is not None:
             last_deploy = dateutil.parser.parse(last_deploy)
             clean = False
 
         if self.site.config['COMMENT_SYSTEM'] and self.site.config['COMMENT_SYSTEM_ID'] == 'nikolademo':
-            self.logger.warn("\nWARNING WARNING WARNING WARNING\n"
-                             "You are deploying using the nikolademo Disqus account.\n"
-                             "That means you will not be able to moderate the comments in your own site.\n"
-                             "And is probably not what you want to do.\n"
-                             "Think about it for 5 seconds, I'll wait :-)\n"
-                             "(press Ctrl+C to abort)\n")
+            self.logger.warning("\nWARNING WARNING WARNING WARNING\n"
+                                "You are deploying using the nikolademo Disqus account.\n"
+                                "That means you will not be able to moderate the comments in your own site.\n"
+                                "And is probably not what you want to do.\n"
+                                "Think about it for 5 seconds, I'll wait :-)\n"
+                                "(press Ctrl+C to abort)\n")
             time.sleep(5)
 
         # Remove drafts and future posts if requested
         undeployed_posts = clean_before_deployment(self.site)
         if undeployed_posts:
-            self.logger.notice("Deleted {0} posts due to DEPLOY_* settings".format(len(undeployed_posts)))
+            self.logger.warning("Deleted {0} posts due to DEPLOY_* settings".format(len(undeployed_posts)))
 
         if args:
             presets = args

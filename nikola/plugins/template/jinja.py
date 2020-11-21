@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2018 Roberto Alsina and others.
+# Copyright © 2012-2020 Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -24,20 +24,20 @@
 # OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-
 """Jinja template handler."""
 
-import os
 import io
 import json
+import os
+
+from nikola.plugin_categories import TemplateSystem
+from nikola.utils import makedirs, req_missing, sort_posts, _smartjoin_filter
+
 try:
     import jinja2
     from jinja2 import meta
 except ImportError:
-    jinja2 = None  # NOQA
-
-from nikola.plugin_categories import TemplateSystem
-from nikola.utils import makedirs, req_missing, sort_posts, _smartjoin_filter
+    jinja2 = None
 
 
 class JinjaTemplates(TemplateSystem):
@@ -108,7 +108,7 @@ class JinjaTemplates(TemplateSystem):
         """Find dependencies for a template string."""
         deps = set([])
         ast = self.lookup.parse(text)
-        dep_names = meta.find_referenced_templates(ast)
+        dep_names = [d for d in meta.find_referenced_templates(ast) if d]
         for dep_name in dep_names:
             filename = self.lookup.loader.get_source(self.lookup, dep_name)[1]
             sub_deps = [filename] + self.get_deps(filename)
@@ -118,7 +118,7 @@ class JinjaTemplates(TemplateSystem):
 
     def get_deps(self, filename):
         """Return paths to dependencies for the template loaded from filename."""
-        with io.open(filename, 'r', encoding='utf-8') as fd:
+        with io.open(filename, 'r', encoding='utf-8-sig') as fd:
             text = fd.read()
         return self.get_string_deps(text)
 

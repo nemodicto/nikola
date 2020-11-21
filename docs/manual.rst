@@ -7,10 +7,7 @@
 .. has_math: true
 .. author: The Nikola Team
 
-The Nikola Handbook
-===================
-
-:Version: 8.0.0rc1
+:Version: 8.1.2
 
 .. class:: alert alert-primary float-md-right
 
@@ -137,7 +134,7 @@ Obsolescence
     You may say those are long term issues, or that they won't matter for years. Well,
     I believe things should work forever, or as close to it as we can make them.
     Nikola's static output and its input files will work as long as you can install
-    Python 3.4 or newer under Linux, Windows, or OS X and can find a server
+    Python 3.5 or newer under Linux, Windows, or macOS and can find a server
     that sends files over HTTP. That's probably 10 or 15 years at least.
 
     Also, static sites are easily handled by the Internet Archive.
@@ -287,12 +284,24 @@ Basic
 `````
 
 title
-    Title of the post. (required)
+    Title of the post. Using HTML/math in titles is not supported/recommended.
+    (required)
 
 slug
     Slug of the post. Used as the last component of the page URL.  We recommend
     and default to using a restricted character set (``a-z0-9-_``) because
     other symbols may cause issues in URLs. (required)
+
+    So, if the slug is "the-slug" the page generated would be "the-slug.html" or
+    "the-slug/index.html" (if you have the pretty URLs option enabled)
+
+    One special case is setting the slug to "index". This means the page generated
+    would be "some_folder/index.html", which means it will be open for the URL
+    that ends in "some_folder" or "some_folder/".
+
+    This is useful in some cases, in others may cause conflicts with other pages
+    Nikola generates (like blog indexes) and as a side effect it disables
+    "pretty URLs" for this page. So use with care.
 
 date
     Date of the post, defaults to now. Multiple date formats are accepted.
@@ -360,10 +369,10 @@ hyphenate
     hyphenation disabled by default.
 
 nocomments
-    Set to "True" to disable comments. Example:
+    Set to "True" to disable comments.
 
 pretty_url
-    Set to "False" to disable pretty URL for this page. Example:
+    Set to "False" to disable pretty URL for this page.
 
 previewimage
     Designate a preview or other representative image path relative to BASE_URL
@@ -373,6 +382,9 @@ previewimage
     .. code:: restructuredtext
 
        .. previewimage: /images/looks_great_on_facebook.png
+
+    If a post has no `previewimage` it will try to use the `DEFAULT_PREVIEW_IMAGE`
+    option from the configuration.
 
     The image can be of any size and dimension (services will crop and adapt)
     but should less than 1 MB and be larger than 300x300 (ideally 600x600).
@@ -534,12 +546,12 @@ and Nikola will hide the docinfo fields in the output if you set
     and considered a title. This is important if you’re mixing metadata
     styles. This can be solved by putting a reST comment before your title.
 
-Markdown metadata
-`````````````````
+Pelican/Markdown metadata
+`````````````````````````
 
-Markdown Metadata only works in Markdown files, and requires the ``markdown.extensions.meta`` extension
+Markdown Metadata (Pelican-style) only works in Markdown files, and requires the ``markdown.extensions.meta`` extension
 (see `MARKDOWN_EXTENSIONS <#markdown>`__). The exact format is described in
-the `markdown metadata extension docs. <https://pythonhosted.org/Markdown/extensions/meta_data.html>`__
+the `markdown metadata extension docs. <https://python-markdown.github.io/extensions/meta_data/>`__
 
 .. code:: text
 
@@ -830,7 +842,8 @@ If you set the ``status`` metadata field of a post to ``draft``, it will not be 
 in indexes and feeds. It *will* be compiled, and if you deploy it it *will* be made
 available, so use with care. If you wish your drafts to be not available in your
 deployed site, you can set ``DEPLOY_DRAFTS = False`` in your configuration. This will
-not work if lazily include ``nikola build`` in your ``DEPLOY_COMMANDS``.
+not work if you include ``nikola build`` in your ``DEPLOY_COMMANDS``, as the
+option removes the draft posts before any ``DEPLOY_COMMANDS`` are run.
 
 Also if a post has a date in the future, it will not be shown in indexes until
 you rebuild after that date. This behavior can be disabled by setting
@@ -1034,7 +1047,7 @@ Please note that tags are case-sensitive and that you cannot have two tags that 
    ERROR: Nikola: Tag Nikola is used in: posts/second-post.rst
    ERROR: Nikola: Tag nikola is used in: posts/1.rst
 
-You can also generate a tag cloud with the `tx3_tag_cloud <https://plugins.getnikola.com/v7/tx3_tag_cloud/>`_ plugin or get a data file for a tag cloud with the `tagcloud <https://plugins.getnikola.com/v7/tagcloud/>`_ plugin.
+You can also generate a tag cloud with the `tx3_tag_cloud <https://plugins.getnikola.com/v7/tx3_tag_cloud/>`_ plugin or get a data file for a tag cloud with the `tagcloud <https://plugins.getnikola.com/v8/tagcloud/>`_ plugin.
 
 Categories
 ``````````
@@ -1097,7 +1110,7 @@ Supported input formats
 Nikola supports multiple input formats.  Out of the box, we have compilers available for:
 
 * reStructuredText (default and pre-configured)
-* `Markdown`_
+* `Markdown`_ (pre-configured since v7.8.7)
 * `Jupyter Notebook`_
 * `HTML`_
 * `PHP`_
@@ -1120,6 +1133,11 @@ Plus, we have specialized compilers in the Plugins Index for:
 * `txt2tags <https://plugins.getnikola.com/#txt2tags>`_
 * `CreoleWiki <https://plugins.getnikola.com/#wiki>`_
 * `WordPress posts <https://plugins.getnikola.com/#wordpress_compiler>`_
+
+To write posts in a different format, you need to configure the compiler and
+paths. To create a post, use ``nikola new_post -f COMPILER_NAME``, eg. ``nikola
+new_post -f markdown``. The default compiler used is the first entry in POSTS
+or PAGES.
 
 Configuring other input formats
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1167,7 +1185,8 @@ The ``-f`` argument to ``new_post`` should be used in the ``ipynb@KERNEL`` forma
 It defaults to Python in the version used by Nikola if not specified.
 
 Jupyter Notebooks are also supported in stand-alone listings, if Jupyter
-support is enabled site-wide.
+support is enabled site-wide. You must have something for ``.ipynb`` in POSTS
+or PAGES for the feature to work.
 
 HTML
 ````
@@ -1327,7 +1346,9 @@ media
 
     .. code:: text
 
-        {{% raw %}}{{% media url="https://www.youtube.com/watch?v=Nck6BZga7TQ" %}}{{% /raw %}}
+        {{% raw %}}{{% media url=https://www.youtube.com/watch?v=Nck6BZga7TQ %}}{{% /raw %}}
+
+    Note that the shortcode won’t work if your compiler turns URLs into clickable links.
 
 post-list
     Will show a list of posts, see the `Post List directive for details <#post-list>`__.
@@ -1490,9 +1511,12 @@ you can't, this will work.
 Configuration
 -------------
 
-The configuration file is called ``conf.py`` and can be used to customize a lot of
-what Nikola does. Its syntax is python, but if you don't know the language, it
-still should not be terribly hard to grasp.
+The configuration file can be used to customize a lot of what Nikola does. Its
+syntax is python, but if you don't know the language, it still should not be
+terribly hard to grasp.
+
+By default, the ``conf.py`` file in the root of the Nikola website will be used.
+You can pass a different configuration file to by using the ``--conf`` command line switch.
 
 The default ``conf.py`` you get with Nikola should be fairly complete, and is quite
 commented.
@@ -1514,10 +1538,33 @@ them.  For those options, two types of values can be provided:
 * a string, which will be used for all languages
 * a dict of language-value pairs, to have different values in each language
 
-.. note:: It is possible to load the configuration from another file by specifying
-          ``--conf=path/to/other.file`` on Nikola's command line. For example, to
-          build your blog using the configuration file ``configurations/test.conf.py``,
-          you have to execute ``nikola build --conf=configurations/test.conf.py``.
+.. note::
+    As of version 8.0.3 it is possible to create configuration files which inherit values from other Python files.
+    This might be useful if you're working with similar environments.
+
+    Example:
+        conf.py:
+            .. code:: python
+
+                BLOG_AUTHOR = "Your Name"
+                BLOG_TITLE = "Demo Site"
+                SITE_URL = "https://yourname.github.io/demo-site
+                BLOG_EMAIL = "joe@demo.site"
+                BLOG_DESCRIPTION = "This is a demo site for Nikola."
+
+        debug.conf.py:
+            .. code:: python
+
+                import conf
+                globals().update(vars(conf))
+                SITE_URL = "http://localhost:8000/"
+
+            or
+
+            .. code:: python
+
+                from conf import *
+                SITE_URL = "http://localhost:8000/"
 
 Customizing Your Site
 ---------------------
@@ -1617,8 +1664,11 @@ Nikola can use various styles for presenting dates.
 DATE_FORMAT
     The date format to use if there is no JS or fancy dates are off.  `Compatible with CLDR syntax. <http://cldr.unicode.org/translation/date-time>`_
 
-JS_DATE_FORMAT
-    The date format to use if fancy dates are on.  Compatible with ``moment.js`` syntax.
+LUXON_DATE_FORMAT
+    The date format to use with Luxon. A dictionary of dictionaries: the top level is languages, and the subdictionaries are of the format ``{'preset': False, 'format': 'yyyy-MM-dd HH:mm'}``. `Used by Luxon <https://moment.github.io/luxon/docs/manual/formatting>`_ (format can be the preset name, eg. ``'DATE_LONG'``).
+
+MOMENTJS_DATE_FORMAT (formerly JS_DATE_FORMAT)
+    The date format to use if fancy dates are on, and the theme is using Moment.js.
 
 DATE_FANCINESS = 0
     Fancy dates are off, and DATE_FORMAT is used.
@@ -1635,41 +1685,53 @@ For Mako:
 
 .. code:: html
 
+    % if date_fanciness != 0:
+    %if date_fanciness == 2:
+        <!-- Polyfill for relative dates in Safari -- best handled with a CDN -->
+        <script src="https://polyfill.io/v3/polyfill.js?features=Intl.RelativeTimeFormat.%7Elocale.${luxon_locales[lang]}"></script>
+    %endif
     <!-- required scripts -- best handled with bundles -->
-    <script src="/assets/js/moment-with-locales.min.js"></script>
+    <script src="/assets/js/luxon.min.js"></script>
     <script src="/assets/js/fancydates.js"></script>
 
     <!-- fancy dates code -->
     <script>
-    moment.locale("${momentjs_locales[lang]}");
-    fancydates(${date_fanciness}, ${js_date_format});
+    luxon.Settings.defaultLocale = "${luxon_locales[lang]}";
+    fancydates(${date_fanciness}, ${luxon_date_format});
     </script>
     <!-- end fancy dates code -->
+    %endif
 
 
 For Jinja2:
 
 .. code:: html
 
+    {% if date_fanciness != 0 %}
+    {% if date_fanciness == 2 %}
+        <!-- Polyfill for relative dates in Safari -- best handled with a CDN -->
+        <script src="https://polyfill.io/v3/polyfill.js?features=Intl.RelativeTimeFormat.%7Elocale.{{ luxon_locales[lang] }}"></script>
+    {% endif %}
     <!-- required scripts -- best handled with bundles -->
-    <script src="/assets/js/moment-with-locales.min.js"></script>
+    <script src="/assets/js/luxon.min.js"></script>
     <script src="/assets/js/fancydates.js"></script>
 
     <!-- fancy dates code -->
     <script>
-    moment.locale("{{ momentjs_locales[lang] }}");
-    fancydates({{ date_fanciness }}, {{ js_date_format }});
+    luxon.Settings.defaultLocale = "{{ luxon_locales[lang] }}";
+    fancydates({{ date_fanciness }}, {{ luxon_date_format }});
     </script>
     <!-- end fancy dates code -->
+    {% endif %}
 
 
 Adding Files
 ------------
 
-Any files you want to be in ``output/`` but are not generated by Nikola (for example,
-``favicon.ico``) just put it in ``files/``. Everything there is copied into
-``output`` by the ``copy_files`` task. Remember that you can't have files that collide
-with files Nikola generates (it will give an error).
+Any files you want to be in ``output/`` but are not generated by Nikola (for
+example, ``favicon.ico``) should be placed in ``files/``.  Remember that you
+can't have files that collide with files Nikola generates (it will give an
+error).
 
 .. admonition:: Important
 
@@ -1803,7 +1865,7 @@ sure you have ``nikola`` and ``git`` installed on your PATH.
    * ``GITHUB_REMOTE_NAME`` is the remote to which changes are pushed.
    * ``GITHUB_COMMIT_SOURCE`` controls whether or not the source branch is
      automatically committed to and pushed. We recommend setting it to
-     ``True``, unless you are automating builds with Travis CI.
+     ``True``, unless you are automating builds with CI (eg. GitHub Actions/GitLab CI).
 
 4. Create a ``.gitignore`` file. We recommend adding at least the following entries:
 
@@ -1825,20 +1887,14 @@ If you want to use a custom domain, create your ``CNAME`` file in
 output directory. To add a custom commit message, use the ``-m`` option,
 followed by your message.
 
-Automated rebuilds with Travis CI
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Automated rebuilds (GitHub Actions, GitLab)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 If you want automated rebuilds and GitHub Pages deployment, allowing you to
-blog from anywhere in the world, follow this guide:
-`Automating Nikola rebuilds with Travis CI
-<https://getnikola.com/blog/automating-nikola-rebuilds-with-travis-ci.html>`_.
+blog from anywhere in the world, you have multiple options:
 
-Automated rebuilds with GitLab
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-GitLab also offers rebuild automation if you want to use Nikola with GitLab
-Pages. Check out the example `Nikola site on GitLab
-<https://gitlab.com/pages/nikola>`_.
+* `Automating Nikola rebuilds with GitHub Actions <https://getnikola.com/blog/automating-nikola-rebuilds-with-github-actions.html>`_ (easier for GitHub)
+* `Example Nikola site for GitLab Pages <https://gitlab.com/pages/nikola>`_
 
 Comments
 --------
@@ -1848,13 +1904,13 @@ are probably expecting: comments.
 
 Nikola supports several third party comment systems:
 
-* `DISQUS <http://disqus.com>`_
-* `IntenseDebate <http://www.intensedebate.com/>`_
-* `LiveFyre <http://www.livefyre.com/>`_
-* `Muut (Formerly moot) <http://muut.com>`_
-* `Facebook <http://facebook.com/>`_
-* `isso <http://posativ.org/isso/>`_
+* `DISQUS <https://disqus.com>`_
+* `IntenseDebate <https://www.intensedebate.com/>`_
+* `Muut (Formerly moot) <https://muut.com/>`_
+* `Facebook <https://facebook.com/>`_
+* `Isso <https://posativ.org/isso/>`_
 * `Commento <https://github.com/adtac/commento>`_
+* `Utterances <https://utteranc.es/>`_
 
 By default it will use DISQUS, but you can change by setting ``COMMENT_SYSTEM``
 to one of "disqus", "intensedebate", "livefyre", "moot", "facebook", "isso" or "commento"
@@ -1864,18 +1920,23 @@ to one of "disqus", "intensedebate", "livefyre", "moot", "facebook", "isso" or "
    The value of ``COMMENT_SYSTEM_ID`` depends on what comment system you
    are using and you can see it in the system's admin interface.
 
-   * For DISQUS it's called the **shortname**
-   * In IntenseDebate it's the **IntenseDebate site acct**
-   * In LiveFyre it's the **siteId**
-   * In Muut it's your **username**
+   * For DISQUS, it's called the **shortname**
+   * For IntenseDebate, it's the **IntenseDebate site acct**
+   * For Muut, it's your **username**
    * For Facebook, you need to `create an app
      <https://developers.facebook.com/apps>`_ (turn off sandbox mode!)
      and get an **App ID**
-   * For isso, it is the URL of isso (must be world-accessible, encoded with
+   * For Isso, it's the URL of your Isso instance (must be world-accessible, encoded with
      Punycode (if using Internationalized Domain Names) and **have a trailing slash**,
-     default ``http://localhost:8080/``)
-   * For commento it's the URL of the commento instance as required by the ``serverUrl``
+     default ``http://localhost:8080/``). You can add custom config options via
+     ``GLOBAL_CONTEXT``, e.g., ``GLOBAL_CONTEXT['isso_config'] = {"require-author": "true"}``
+   * For Commento, it's the URL of the commento instance as required by the ``serverUrl``
      parameter in commento's documentation.
+   * For Utterances, it's the **repo name** (``"org/user"``) on GitHub whose
+     issue tracker is used for comments. Additional Utterances configuration
+     values can be stored in the ``GLOBAL_CONTEXT``, e.g.,
+     ``GLOBAL_CONTEXT['utterances_config'] = {"issue-term": "title",
+     "label": "Comments", "theme": "github-light", "crossorigin": "anonymous")``.
 
 To use comments in a visible site, you should register with the service and
 then set the ``COMMENT_SYSTEM_ID`` option.
@@ -1921,6 +1982,14 @@ You can disable comments for a post by adding a "nocomments" metadata field to i
     You need jQuery, but not because Facebook wants it (see Issue
     #639).
 
+.. admonition:: Utterances Support
+
+   You can copy the configuration options from the `Utterances setup page
+   <https://utteranc.es>`_ into ``GLOBAL_CONTEXT['utterances_config']``,
+   except for ``repo``, which should be set as ``COMMENT_SYSTEM_ID``. Note
+   that the either ``issue-term`` or ``issue-number`` must be provided. All
+   other Utterances configuration options are optional.
+
 Images and Galleries
 --------------------
 
@@ -1930,9 +1999,7 @@ and put images there. Nikola will take care of creating thumbnails, index page, 
 If you click on images on a gallery, or on images with links in post, you will
 see a bigger image, thanks to the excellent `baguetteBox
 <https://feimosi.github.io/baguetteBox.js/>`_.  If don’t want this behavior, add an
-``.islink`` class to your link. (The behavior is caused by ``<a
-class="reference">`` if you need to use it outside of galleries and reST
-thumbnails.)
+``.islink`` class to your link.
 
 The gallery pages are generated using the ``gallery.tmpl`` template, and you can
 customize it there (you could switch to another lightbox instead of baguetteBox, change
@@ -1988,6 +2055,15 @@ The ``conf.py`` options affecting images and gallery pages are these:
     USE_FILENAME_AS_TITLE = True
     EXTRA_IMAGE_EXTENSIONS = []
 
+    # Use a thumbnail (defined by ".. previewimage:" in the gallery's index) in
+    # list of galleries for each gallery
+    GALLERIES_USE_THUMBNAIL = False
+
+    # Image to use as thumbnail for those galleries that don't have one
+    # None: show a grey square
+    # '/url/to/file': show the image in that url
+    GALLERIES_DEFAULT_THUMBNAIL = None
+
     # If set to False, it will sort by filename instead. Defaults to True
     GALLERY_SORT_BY_DATE = True
 
@@ -2007,7 +2083,8 @@ The ``conf.py`` options affecting images and gallery pages are these:
 
 If you add a reST file in ``galleries/gallery_name/index.txt`` its contents will be
 converted to HTML and inserted above the images in the gallery page. The
-format is the same as for posts.
+format is the same as for posts. You can use the ``title`` and ``previewimage``
+metadata fields to change how the gallery is shown.
 
 If you add some image filenames in ``galleries/gallery_name/exclude.meta``, they
 will be excluded in the gallery page.
@@ -2197,19 +2274,19 @@ The currently available filters are:
       }
 
 filters.html_tidy_nowrap
-   Prettify HTML 5 documents with `tidy5 <http://www.html-tidy.org/>`_
+   Prettify HTML 5 documents with `tidy5 <https://www.html-tidy.org/>`_
 
 filters.html_tidy_wrap
-   Prettify HTML 5 documents wrapped at 80 characters with `tidy5 <http://www.html-tidy.org/>`_
+   Prettify HTML 5 documents wrapped at 80 characters with `tidy5 <https://www.html-tidy.org/>`_
 
 filters.html_tidy_wrap_attr
-   Prettify HTML 5 documents and wrap lines and attributes with `tidy5 <http://www.html-tidy.org/>`_
+   Prettify HTML 5 documents and wrap lines and attributes with `tidy5 <https://www.html-tidy.org/>`_
 
 filters.html_tidy_mini
-   Minify HTML 5 into smaller documents with `tidy5 <http://www.html-tidy.org/>`_
+   Minify HTML 5 into smaller documents with `tidy5 <https://www.html-tidy.org/>`_
 
 filters.html_tidy_withconfig
-   Run `tidy5 <http://www.html-tidy.org/>`_ with ``tidy5.conf`` as the config file (supplied by user)
+   Run `tidy5 <https://www.html-tidy.org/>`_ with ``tidy5.conf`` as the config file (supplied by user)
 
 filters.html5lib_minify
    Minify HTML5 using html5lib_minify
@@ -2218,10 +2295,13 @@ filters.html5lib_xmllike
    Format using html5lib
 
 filters.typogrify
-   Improve typography using `typogrify <http://static.mintchaos.com/projects/typogrify/>`__
+   Improve typography using `typogrify <https://github.com/mintchaos/typogrify>`__
 
 filters.typogrify_sans_widont
    Same as typogrify without the widont filter
+
+filters.typogrify_custom
+    Run typogrify with a custom set or filters. Takes ``typogrify_filters`` (a list of callables) and ``ignore_tags`` (defaults to None).
 
 filters.minify_lines
    **THIS FILTER HAS BEEN TURNED INTO A NOOP** and currently does nothing.
@@ -2231,7 +2311,7 @@ filters.normalize_html
    quotes. Usually not needed.
 
 filters.yui_compressor
-   Compress CSS/JavaScript using `YUI compressor <http://yui.github.io/yuicompressor/>`_
+   Compress CSS/JavaScript using `YUI compressor <https://yui.github.io/yuicompressor/>`_
 
 filters.closure_compiler
    Compile, compress, and optimize JavaScript `Google Closure Compiler <https://developers.google.com/closure/compiler/>`_
@@ -2240,13 +2320,13 @@ filters.optipng
    Compress PNG files using `optipng <http://optipng.sourceforge.net/>`_
 
 filters.jpegoptim
-   Compress JPEG files using `jpegoptim <http://www.kokkonen.net/tjko/projects.html>`_
+   Compress JPEG files using `jpegoptim <https://www.kokkonen.net/tjko/projects.html>`_
 
 filters.cssminify
-   Minify CSS using http://cssminifier.com/ (requires Internet access)
+   Minify CSS using https://cssminifier.com/ (requires Internet access)
 
 filters.jsminify
-   Minify JS using http://javascript-minifier.com/ (requires Internet access)
+   Minify JS using https://javascript-minifier.com/ (requires Internet access)
 
 filters.jsonminify
    Minify JSON files (strip whitespace and use minimal separators).
@@ -2319,7 +2399,10 @@ You can apply filters to specific posts or pages by using the ``filters`` metada
 
 .. code:: restructuredtext
 
-    .. filters: filters.html_tidy_nowrap, "sed s/foo/bar"
+    .. filters: filters.html_tidy_nowrap, "sed s/foo/bar %s"
+
+Please note that applying custom filters (not those provided via Nikola's filter module)
+via metadata only works for filters implemented via external programs like in that `sed` example.
 
 Optimizing Your Website
 -----------------------
@@ -2590,7 +2673,8 @@ and also create a ``listings/foo.py.html`` page (or in another directory, depend
 ``LISTINGS_FOLDER``) and the listing will have a title linking to it.
 
 The stand-alone ``listings/`` pages also support Jupyter notebooks, if they are
-supported site-wide.
+supported site-wide. You must have something for ``.ipynb`` in POSTS or PAGES
+for the feature to work.
 
 Listings support the same options `reST includes`__ support (including
 various options for controlling which parts of the file are included), and also
@@ -2719,6 +2803,13 @@ and it will produce:
 
     Take a look at :doc:`creating-a-theme` to know how to do it.
 
+The reference in angular brackets should be the `slug` for the target page. It supports a fragment, so
+things like ``<creating-a-theme#starting-from-somewhere>`` should work. You can also use the title, and
+Nikola will slugify it for you, so ``Creating a theme`` is also supported.
+
+Keep in mind that the important thing is the slug. No attempt is made to check if the fragment points to
+an existing location in the page, and references that don't match any page's slugs will cause warnings.
+
 Post List
 ~~~~~~~~~
 
@@ -2783,7 +2874,7 @@ The following options are recognized:
       * clause: attribute comparison_operator value (spaces optional)
           * attribute: year, month, day, hour, month, second, weekday, isoweekday; or empty for full datetime
           * comparison_operator: == != <= >= < >
-          * value: integer, 'now' or dateutil-compatible date input
+          * value: integer, 'now', 'today', or dateutil-compatible date input
 
 * ``tags`` : string [, string...]
       Filter posts to show only posts having at least one of the ``tags``.
@@ -2834,6 +2925,16 @@ dependency issues.
 
 If you are using this as a shortcode, flags (``reverse``, ``all``) are meant to be used
 with a ``True`` argument, eg. ``all=True``.
+
+.. sidebar:: Docutils Configuration
+
+   ReStructured Text is "compiled" by docutils, which supports a number of
+   configuration options. It would be difficult to integrate them all into
+   Nikola's configuration, so you can just put a ``docutils.conf`` next
+   to your ``conf.py`` and any settings in its ``[nikola]`` section will be used.
+
+   More information in the `docutils configuration reference <http://docutils.sourceforge.net/docs/user/config.html>`__
+
 
 Importing your WordPress site into Nikola
 -----------------------------------------
@@ -2931,11 +3032,6 @@ Twitter Cards enable you to show additional information in Tweets that link
 to your content.
 Nikola supports `Twitter Cards <https://dev.twitter.com/docs/cards>`_.
 They are implemented to use *Open Graph* tags whenever possible.
-
-.. admonition:: Important
-
-    To use Twitter Cards you need to opt-in on Twitter.
-    To do so, please visit https://cards-dev.twitter.com/validator
 
 Images displayed come from the `previewimage` meta tag.
 

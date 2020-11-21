@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2018 Roberto Alsina and others.
+# Copyright © 2012-2020 Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -47,15 +47,15 @@ class CompilePandoc(PageCompiler):
     def set_site(self, site):
         """Set Nikola site."""
         self.config_dependencies = [str(site.config['PANDOC_OPTIONS'])]
-        super(CompilePandoc, self).set_site(site)
+        super().set_site(site)
 
     def compile(self, source, dest, is_two_file=True, post=None, lang=None):
         """Compile the source file into HTML and save as dest."""
         makedirs(os.path.dirname(dest))
         try:
             subprocess.check_call(['pandoc', '-o', dest, source] + self.site.config['PANDOC_OPTIONS'])
-            with open(dest, 'r', encoding='utf-8') as inf:
-                output, shortcode_deps = self.site.apply_shortcodes(inf.read(), with_dependencies=True)
+            with open(dest, 'r', encoding='utf-8-sig') as inf:
+                output, shortcode_deps = self.site.apply_shortcodes(inf.read())
             with open(dest, 'w', encoding='utf-8') as outf:
                 outf.write(output)
             if post is None:

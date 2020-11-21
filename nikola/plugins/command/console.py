@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2018 Chris Warrick, Roberto Alsina and others.
+# Copyright © 2012-2020 Chris Warrick, Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -79,6 +79,14 @@ If there is no console to use specified (as -b, -i, -p) it tries IPython, then f
             'default': None,
             'help': 'Run a single command',
         },
+        {
+            'name': 'script',
+            'short': 's',
+            'long': 'script',
+            'type': str,
+            'default': None,
+            'help': 'Execute a python script in the console context',
+        },
     ]
 
     def ipython(self, willful=True):
@@ -100,7 +108,7 @@ If there is no console to use specified (as -b, -i, -p) it tries IPython, then f
         """Run a bpython shell."""
         try:
             import bpython
-        except ImportError as e:
+        except ImportError:
             if willful:
                 req_missing(['bpython'], 'use the bpython console')
             raise  # That’s how _execute knows whether to try something else.
@@ -143,6 +151,10 @@ If there is no console to use specified (as -b, -i, -p) it tries IPython, then f
         }
         if options['command']:
             exec(options['command'], None, self.context)
+        elif options['script']:
+            with open(options['script']) as inf:
+                code = compile(inf.read(), options['script'], 'exec')
+            exec(code, None, self.context)
         elif options['bpython']:
             self.bpython(True)
         elif options['ipython']:

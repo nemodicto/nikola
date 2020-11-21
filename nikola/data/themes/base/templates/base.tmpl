@@ -13,18 +13,18 @@ ${template_hooks['extra_head']()}
 <body>
     <a href="#content" class="sr-only sr-only-focusable">${messages("Skip to main content")}</a>
     <div id="container">
-         ${header.html_header()}
-         <main id="content">
+        ${header.html_header()}
+        <main id="content">
             <%block name="content"></%block>
-         </main>
-         ${footer.html_footer()}
+        </main>
+        ${footer.html_footer()}
     </div>
     ${base.late_load_js()}
     % if date_fanciness != 0:
     <!-- fancy dates -->
     <script>
-    moment.locale("${momentjs_locales[lang]}");
-    fancydates(${date_fanciness}, ${js_date_format});
+    luxon.Settings.defaultLocale = "${luxon_locales[lang]}";
+    fancydates(${date_fanciness}, ${luxon_date_format});
     </script>
     <!-- end fancy dates -->
     % endif
@@ -32,9 +32,7 @@ ${template_hooks['extra_head']()}
     <script>
     baguetteBox.run('div#content', {
         ignoreClass: 'islink',
-        captions: function(element) {
-            return element.getElementsByTagName('img')[0].alt;
-    }});
+        captions: function(element){var i=element.getElementsByTagName('img')[0];return i===undefined?'':i.alt;}});
     </script>
     ${body_end}
     ${template_hooks['body_end']()}

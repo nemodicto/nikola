@@ -30,7 +30,7 @@ MESSAGES = {
     "Previous": "Precedente",
     "Publication date": "Data di pubblicazione",
     "RSS feed": "Feed RSS",
-    "Read in English": "Leggi in inglese",
+    "Read in English": "Leggi in italiano",
     "Read more": "Continua la lettura",
     "Skip to main content": "Vai al testo principale",
     "Source": "Sorgente",
@@ -45,5 +45,5 @@ MESSAGES = {
     "Write your post here.": "Scrivi qui il tuo post.",
     "old posts, page %d": "vecchi articoli, pagina %d",
     "page %d": "pagina %d",
-    "updated": "",
+    "updated": "aggiornato",
 }

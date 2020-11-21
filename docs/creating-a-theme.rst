@@ -7,9 +7,6 @@
 .. description:
 .. type: text
 
-Creating a Theme
-================
-
 Nikola is a static site and blog generator. So is Jekyll. While I like what we have done with Nikola,
 I do admit that Jekyll (and others!) have many more, and nicer themes than Nikola does.
 
@@ -649,7 +646,7 @@ So, it looks like we will have to fix ``html_site_title`` after all:
 
     <%def name="html_site_title()">
         <h3 id="brand" class="masthead-title">
-        <a href="${abs_link(_link("root", None, lang))}" title="${blog_title}" rel="home">${blog_title}</a>
+        <a href="${_link("root", None, lang)}" title="${blog_title}" rel="home">${blog_title}</a>
         </h3>
     </%def>
 

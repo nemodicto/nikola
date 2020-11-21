@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2018 Roberto Alsina and others.
+# Copyright © 2012-2020 Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -26,23 +26,19 @@
 
 """Page compiler plugin for Markdown."""
 
-
 import io
+import json
 import os
 import threading
-import json
-
-try:
-    from markdown import Markdown
-except ImportError:
-    Markdown = None  # NOQA
-    nikola_extension = None
-    gist_extension = None
-    podcast_extension = None
 
 from nikola import shortcodes as sc
 from nikola.plugin_categories import PageCompiler
 from nikola.utils import makedirs, req_missing, write_metadata, LocaleBorg, map_metadata
+
+try:
+    from markdown import Markdown
+except ImportError:
+    Markdown = None
 
 
 class ThreadLocalMarkdown(threading.local):
@@ -79,7 +75,7 @@ class CompileMarkdown(PageCompiler):
 
     def set_site(self, site):
         """Set Nikola site."""
-        super(CompileMarkdown, self).set_site(site)
+        super().set_site(site)
         self.config_dependencies = []
         extensions = []
         for plugin_info in self.get_compiler_extensions():
@@ -120,8 +116,8 @@ class CompileMarkdown(PageCompiler):
         if Markdown is None:
             req_missing(['markdown'], 'build this site (compile Markdown)')
         makedirs(os.path.dirname(dest))
-        with io.open(dest, "w+", encoding="utf8") as out_file:
-            with io.open(source, "r", encoding="utf8") as in_file:
+        with io.open(dest, "w+", encoding="utf-8") as out_file:
+            with io.open(source, "r", encoding="utf-8-sig") as in_file:
                 data = in_file.read()
             output, shortcode_deps = self.compile_string(data, source, is_two_file, post, lang)
             out_file.write(output)
@@ -146,14 +142,14 @@ class CompileMarkdown(PageCompiler):
         makedirs(os.path.dirname(path))
         if not content.endswith('\n'):
             content += '\n'
-        with io.open(path, "w+", encoding="utf8") as fd:
+        with io.open(path, "w+", encoding="utf-8") as fd:
             if onefile:
                 fd.write(write_metadata(metadata, comment_wrap=True, site=self.site, compiler=self))
             fd.write(content)
 
     def read_metadata(self, post, lang=None):
         """Read the metadata from a post, and return a metadata dict."""
-        lang = lang or self.site.config.get('DEFAULT_LANGUAGE', 'en')
+        lang = lang or self.site.config['DEFAULT_LANG']
         if not self.supports_metadata:
             return {}
         if Markdown is None:
@@ -161,7 +157,7 @@ class CompileMarkdown(PageCompiler):
         if lang is None:
             lang = LocaleBorg().current_lang
         source = post.translated_source_path(lang)
-        with io.open(source, 'r', encoding='utf-8') as inf:
+        with io.open(source, 'r', encoding='utf-8-sig') as inf:
             # Note: markdown meta returns lowercase keys
             data = inf.read()
             # If the metadata starts with "---" it's actually YAML and

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2018 Roberto Alsina and others.
+# Copyright © 2012-2020 Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -29,23 +29,25 @@
 All filters defined in this module are registered in Nikola.__init__.
 """
 
-from functools import wraps
-import os
 import io
 import json
+import os
+import re
 import shutil
+import shlex
 import subprocess
 import tempfile
-import shlex
+from functools import wraps
 
 import lxml
-try:
-    import typogrify.filters as typo
-except ImportError:
-    typo = None  # NOQA
 import requests
 
 from .utils import req_missing, LOGGER, slugify
+
+try:
+    import typogrify.filters as typo
+except ImportError:
+    typo = None
 
 
 class _ConfigurableFilter(object):
@@ -88,7 +90,7 @@ def apply_to_text_file(f):
     """
     @wraps(f)
     def f_in_file(fname, *args, **kwargs):
-        with io.open(fname, 'r', encoding='utf-8') as inf:
+        with io.open(fname, 'r', encoding='utf-8-sig') as inf:
             data = inf.read()
         data = f(data, *args, **kwargs)
         with io.open(fname, 'w+', encoding='utf-8') as outf:
@@ -148,13 +150,13 @@ def yui_compressor(infile, executable=None):
     yuicompressor = executable
     if not yuicompressor:
         try:
-            subprocess.call('yui-compressor', stdout=open(os.devnull, 'w'), stderr=open(os.devnull, 'w'))
+            subprocess.call('yui-compressor', stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             yuicompressor = 'yui-compressor'
         except Exception:
             pass
     if not yuicompressor:
         try:
-            subprocess.call('yuicompressor', stdout=open(os.devnull, 'w'), stderr=open(os.devnull, 'w'))
+            subprocess.call('yuicompressor', stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             yuicompressor = 'yuicompressor'
         except Exception:
             raise Exception("yui-compressor is not installed.")
@@ -264,21 +266,33 @@ def minify_lines(data):
     return data
 
 
+def _run_typogrify(data, typogrify_filters, ignore_tags=None):
+    """Run typogrify with ignore support."""
+    if ignore_tags is None:
+        ignore_tags = ["title"]
+
+    data = _normalize_html(data)
+
+    section_list = typo.process_ignores(data, ignore_tags)
+
+    rendered_text = ""
+    for text_item, should_process in section_list:
+        if should_process:
+            for f in typogrify_filters:
+                text_item = f(text_item)
+
+        rendered_text += text_item
+
+    return rendered_text
+
+
 @apply_to_text_file
 def typogrify(data):
     """Prettify text with typogrify."""
     if typo is None:
         req_missing(['typogrify'], 'use the typogrify filter', optional=True)
         return data
-
-    data = _normalize_html(data)
-    data = typo.amp(data)
-    data = typo.widont(data)
-    data = typo.smartypants(data)
-    # Disabled because of typogrify bug where it breaks <title>
-    # data = typo.caps(data)
-    data = typo.initial_quotes(data)
-    return data
+    return _run_typogrify(data, [typo.amp, typo.widont, typo.smartypants, typo.caps, typo.initial_quotes])
 
 
 def _smarty_oldschool(text):
@@ -298,15 +312,7 @@ def typogrify_oldschool(data):
         req_missing(['typogrify'], 'use the typogrify_oldschool filter', optional=True)
         return data
 
-    data = _normalize_html(data)
-    data = typo.amp(data)
-    data = typo.widont(data)
-    data = _smarty_oldschool(data)
-    data = typo.smartypants(data)
-    # Disabled because of typogrify bug where it breaks <title>
-    # data = typo.caps(data)
-    data = typo.initial_quotes(data)
-    return data
+    return _run_typogrify(data, [typo.amp, typo.widont, _smarty_oldschool, typo.smartypants, typo.caps, typo.initial_quotes])
 
 
 @apply_to_text_file
@@ -316,24 +322,27 @@ def typogrify_sans_widont(data):
     # wrapping, see issue #1465
     if typo is None:
         req_missing(['typogrify'], 'use the typogrify_sans_widont filter')
+        return data
 
-    data = _normalize_html(data)
-    data = typo.amp(data)
-    data = typo.smartypants(data)
-    # Disabled because of typogrify bug where it breaks <title>
-    # data = typo.caps(data)
-    data = typo.initial_quotes(data)
-    return data
+    return _run_typogrify(data, [typo.amp, typo.smartypants, typo.caps, typo.initial_quotes])
+
+
+@apply_to_text_file
+def typogrify_custom(data, typogrify_filters, ignore_tags=None):
+    """Run typogrify with a custom list of fliter functions."""
+    if typo is None:
+        req_missing(['typogrify'], 'use the typogrify filter', optional=True)
+        return data
+    return _run_typogrify(data, typogrify_filters, ignore_tags)
 
 
 @apply_to_text_file
 def php_template_injection(data):
     """Insert PHP code into Nikola templates."""
-    import re
-    template = re.search('<\!-- __NIKOLA_PHP_TEMPLATE_INJECTION source\:(.*) checksum\:(.*)__ -->', data)
+    template = re.search(r'<\!-- __NIKOLA_PHP_TEMPLATE_INJECTION source\:(.*) checksum\:(.*)__ -->', data)
     if template:
         source = template.group(1)
-        with io.open(source, "r", encoding="utf-8") as in_file:
+        with io.open(source, "r", encoding="utf-8-sig") as in_file:
             phpdata = in_file.read()
         _META_SEPARATOR = '(' + os.linesep * 2 + '|' + ('\n' * 2) + '|' + ("\r\n" * 2) + ')'
         phpdata = re.split(_META_SEPARATOR, phpdata, maxsplit=1)[-1]
@@ -410,7 +419,7 @@ def add_header_permalinks(fname, xpath_list=None, file_blacklist=None):
     file_blacklist = file_blacklist or []
     if fname in file_blacklist:
         return
-    with io.open(fname, 'r', encoding='utf-8') as inf:
+    with io.open(fname, 'r', encoding='utf-8-sig') as inf:
         data = inf.read()
     doc = lxml.html.document_fromstring(data)
     # Get language for slugify

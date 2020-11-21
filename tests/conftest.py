@@ -2,8 +2,23 @@ import os
 import pytest
 
 
-@pytest.yield_fixture(autouse=True)
+@pytest.fixture(autouse=True)
 def ensure_chdir():
-    x = os.getcwd()
-    yield
-    os.chdir(x)
+    old_dir = os.getcwd()
+    try:
+        yield
+    finally:
+        os.chdir(old_dir)
+
+
+@pytest.fixture(scope="module")
+def test_dir():
+    """
+    Absolute path to the directory with the tests.
+    """
+    return os.path.abspath(os.path.dirname(__file__))
+
+
+@pytest.fixture(scope="session")
+def default_locale() -> str:
+    return os.environ.get("NIKOLA_LOCALE_DEFAULT", "en")

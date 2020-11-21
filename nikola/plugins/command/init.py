@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2018 Roberto Alsina and others.
+# Copyright © 2012-2020 Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -26,20 +26,22 @@
 
 """Create a new site."""
 
-import os
-import shutil
+import datetime
 import io
 import json
+import os
+import shutil
 import textwrap
-import datetime
 import unidecode
+from urllib.parse import urlsplit, urlunsplit
+
 import dateutil.tz
 import dateutil.zoneinfo
 from mako.template import Template
 from pkg_resources import resource_filename
 
 import nikola
-from nikola.nikola import DEFAULT_INDEX_READ_MORE_LINK, DEFAULT_FEED_READ_MORE_LINK, LEGAL_VALUES, urlsplit, urlunsplit
+from nikola.nikola import DEFAULT_INDEX_READ_MORE_LINK, DEFAULT_FEED_READ_MORE_LINK, LEGAL_VALUES
 from nikola.plugin_categories import Command
 from nikola.utils import ask, ask_yesno, get_logger, makedirs, load_messages
 from nikola.packages.tzlocal import get_localzone
@@ -82,22 +84,22 @@ SAMPLE_CONF = {
     ("pages/*.html", "pages", "page.tmpl"),
 )""",
     'COMPILERS': """{
-    "rest": ('.rst', '.txt'),
-    "markdown": ('.md', '.mdown', '.markdown'),
-    "textile": ('.textile',),
-    "txt2tags": ('.t2t',),
-    "bbcode": ('.bb',),
-    "wiki": ('.wiki',),
-    "ipynb": ('.ipynb',),
-    "html": ('.html', '.htm'),
+    "rest": ['.rst', '.txt'],
+    "markdown": ['.md', '.mdown', '.markdown'],
+    "textile": ['.textile'],
+    "txt2tags": ['.t2t'],
+    "bbcode": ['.bb'],
+    "wiki": ['.wiki'],
+    "ipynb": ['.ipynb'],
+    "html": ['.html', '.htm'],
     # PHP files are rendered the usual way (i.e. with the full templates).
     # The resulting files have .php extensions, making it possible to run
     # them without reconfiguring your server to recognize them.
-    "php": ('.php',),
+    "php": ['.php'],
     # Pandoc detects the input from the source filename
     # but is disabled by default as it would conflict
     # with many of the others.
-    # "pandoc": ('.rst', '.md', '.txt'),
+    # "pandoc": ['.rst', '.md', '.txt'],
 }""",
     'NAVIGATION_LINKS': """{
     DEFAULT_LANG: (
@@ -169,6 +171,14 @@ def format_default_translations_config(additional_languages):
     for lang in sorted(additional_languages):
         lang_paths.append('    "{0}": "./{0}",'.format(lang))
     return "{{\n{0}\n}}".format("\n".join(lang_paths))
+
+
+def get_default_translations_dict(default_lang, additional_languages):
+    """Generate a TRANSLATIONS dict matching the config from 'format_default_translations_config'."""
+    tr = {default_lang: ''}
+    for l in additional_languages:
+        tr[l] = './' + l
+    return tr
 
 
 def format_navigation_links(additional_languages, default_lang, messages, strip_indexes=False):
@@ -285,7 +295,7 @@ class CommandInit(Command):
     @classmethod
     def create_empty_site(cls, target):
         """Create an empty site with directories only."""
-        for folder in ('files', 'galleries', 'listings', 'posts', 'pages'):
+        for folder in ('files', 'galleries', 'images', 'listings', 'posts', 'pages'):
             makedirs(os.path.join(target, folder))
 
     @staticmethod
@@ -353,9 +363,8 @@ class CommandInit(Command):
 
             # Get messages for navigation_links.  In order to do this, we need
             # to generate a throwaway TRANSLATIONS dict.
-            tr = {default: ''}
-            for l in langs:
-                tr[l] = './' + l
+            tr = get_default_translations_dict(default, langs)
+
             # Assuming that base contains all the locales, and that base does
             # not inherit from anywhere.
             try:

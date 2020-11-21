@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2018 Roberto Alsina and others.
+# Copyright © 2012-2020 Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -34,8 +34,8 @@ import shutil
 import subprocess
 import sys
 
-from blinker import signal
 import dateutil.tz
+from blinker import signal
 
 from nikola.plugin_categories import Command
 from nikola import utils
@@ -89,7 +89,7 @@ def get_date(schedule=False, rule=None, last_date=None, tz=None, iso8601=False):
         except ImportError:
             LOGGER.error('To use the --schedule switch of new_post, '
                          'you have to install the "dateutil" package.')
-            rrule = None  # NOQA
+            rrule = None
     if schedule and rrule and rule:
         try:
             rule_ = rrule.rrulestr(rule, dtstart=last_date or date)
@@ -243,6 +243,7 @@ class CommandNewPost(Command):
         date_path_opt = options['date-path']
         date_path_auto = self.site.config['NEW_POST_DATE_PATH'] and content_type == 'post'
         date_path_format = self.site.config['NEW_POST_DATE_PATH_FORMAT'].strip('/')
+        post_type = options.get('type', 'text')
 
         if wants_available:
             self.print_compilers()
@@ -264,7 +265,7 @@ class CommandNewPost(Command):
         if "@" in content_format:
             content_format, content_subformat = content_format.split("@")
 
-        if not content_format and path:
+        if not content_format and path and not os.path.isdir(path):
             # content_format not specified. If path was given, use
             # it to guess (Issue #2798)
             extension = os.path.splitext(path)[-1]
@@ -318,7 +319,7 @@ class CommandNewPost(Command):
             while not title:
                 title = utils.ask('Title')
 
-        if isinstance(title, utils.bytes_str):
+        if isinstance(title, bytes):
             try:
                 title = title.decode(sys.stdin.encoding)
             except (AttributeError, TypeError):  # for tests
@@ -328,7 +329,7 @@ class CommandNewPost(Command):
         if not path:
             slug = utils.slugify(title, lang=self.site.default_lang)
         else:
-            if isinstance(path, utils.bytes_str):
+            if isinstance(path, bytes):
                 try:
                     path = path.decode(sys.stdin.encoding)
                 except (AttributeError, TypeError):  # for tests
@@ -342,11 +343,11 @@ class CommandNewPost(Command):
             else:
                 slug = utils.slugify(os.path.splitext(os.path.basename(path))[0], lang=self.site.default_lang)
 
-        if isinstance(author, utils.bytes_str):
-                try:
-                    author = author.decode(sys.stdin.encoding)
-                except (AttributeError, TypeError):  # for tests
-                    author = author.decode('utf-8')
+        if isinstance(author, bytes):
+            try:
+                author = author.decode(sys.stdin.encoding)
+            except (AttributeError, TypeError):  # for tests
+                author = author.decode('utf-8')
 
         # Calculate the date to use for the content
         # SCHEDULE_ALL is post-only (Issue #2921)
@@ -363,7 +364,7 @@ class CommandNewPost(Command):
             'tags': tags,
             'link': '',
             'description': '',
-            'type': 'text',
+            'type': post_type,
         }
 
         if not path:
@@ -377,7 +378,7 @@ class CommandNewPost(Command):
             meta_path = os.path.join(output_path, slug + ".meta")
         else:
             if date_path_opt:
-                LOGGER.warn("A path has been specified, ignoring -d")
+                LOGGER.warning("A path has been specified, ignoring -d")
             txt_path = os.path.join(self.site.original_cwd, path)
             meta_path = os.path.splitext(txt_path)[0] + ".meta"
 
@@ -412,10 +413,10 @@ class CommandNewPost(Command):
         # Override onefile if not really supported.
         if not compiler_plugin.supports_onefile and onefile:
             onefile = False
-            LOGGER.warn('This compiler does not support one-file posts.')
+            LOGGER.warning('This compiler does not support one-file posts.')
 
         if onefile and import_file:
-            with io.open(import_file, 'r', encoding='utf-8') as fh:
+            with io.open(import_file, 'r', encoding='utf-8-sig') as fh:
                 content = fh.read()
         elif not import_file:
             if is_page:
@@ -429,7 +430,7 @@ class CommandNewPost(Command):
         else:
             compiler_plugin.create_post(
                 txt_path, content=content, onefile=onefile, title=title,
-                slug=slug, date=date, tags=tags, is_page=is_page, **metadata)
+                slug=slug, date=date, tags=tags, is_page=is_page, type=post_type, **metadata)
 
         event = dict(path=txt_path)
 

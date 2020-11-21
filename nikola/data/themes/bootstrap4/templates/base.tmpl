@@ -15,13 +15,20 @@ ${template_hooks['extra_head']()}
 
 <nav class="navbar navbar-expand-md static-top mb-4
 % if theme_config.get('navbar_light'):
-navbar-light bg-light
+navbar-light
 % else:
-navbar-dark bg-dark
+navbar-dark
 % endif
+% if theme_config.get('navbar_custom_bg'):
+${theme_config['navbar_custom_bg']}
+% elif theme_config.get('navbar_light'):
+bg-light
+% else:
+bg-dark
+%endif
 ">
     <div class="container"><!-- This keeps the margins nice -->
-        <a class="navbar-brand" href="${abs_link(_link("root", None, lang))}">
+        <a class="navbar-brand" href="${_link("root", None, lang)}">
         %if logo_url:
             <img src="${logo_url}" alt="${blog_title|h}" id="logo" class="d-inline-block align-top">
         %endif
@@ -65,30 +72,32 @@ navbar-dark bg-dark
     <div class="body-content">
         <!--Body content-->
         ${template_hooks['page_header']()}
+        <%block name="extra_header"></%block>
         <%block name="content"></%block>
         <!--End of body content-->
 
         <footer id="footer">
             ${content_footer}
             ${template_hooks['page_footer']()}
+            <%block name="extra_footer"></%block>
         </footer>
     </div>
 </div>
 
 ${base.late_load_js()}
-    <!-- fancy dates -->
-    <script>
-    moment.locale("${momentjs_locales[lang]}");
-    fancydates(${date_fanciness}, ${js_date_format});
-    </script>
-    <!-- end fancy dates -->
+    %if date_fanciness != 0:
+        <!-- fancy dates -->
+        <script>
+        luxon.Settings.defaultLocale = "${luxon_locales[lang]}";
+        fancydates(${date_fanciness}, ${luxon_date_format});
+        </script>
+        <!-- end fancy dates -->
+    %endif
     <%block name="extra_js"></%block>
     <script>
     baguetteBox.run('div#content', {
         ignoreClass: 'islink',
-        captions: function(element) {
-            return element.getElementsByTagName('img')[0].alt;
-    }});
+        captions: function(element){var i=element.getElementsByTagName('img')[0];return i===undefined?'':i.alt;}});
     </script>
 ${body_end}
 ${template_hooks['body_end']()}

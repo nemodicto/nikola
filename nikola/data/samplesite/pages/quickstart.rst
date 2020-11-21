@@ -5,9 +5,6 @@
 .. link:
 .. description:
 
-A ReStructuredText Primer
-=========================
-
 :Author: Richard Jones
 :Version: $Revision: 5801 $
 :Copyright: This document has been placed in the public domain.
@@ -366,7 +363,7 @@ Images
 
 __ ../quickref/#directives
 
-To include an image in your document, you use the the ``image`` directive__.
+To include an image in your document, you use the ``image`` directive__.
 For example::
 
   .. image:: /images/nikola.png

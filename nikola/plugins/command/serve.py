@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2018 Roberto Alsina and others.
+# Copyright © 2012-2020 Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -32,18 +32,9 @@ import re
 import signal
 import socket
 import webbrowser
-try:
-    from BaseHTTPServer import HTTPServer
-    from SimpleHTTPServer import SimpleHTTPRequestHandler
-except ImportError:
-    from http.server import HTTPServer  # NOQA
-    from http.server import SimpleHTTPRequestHandler  # NOQA
-
-try:
-    from StringIO import StringIO
-except ImportError:
-    from io import BytesIO as StringIO  # NOQA
-
+from http.server import HTTPServer
+from http.server import SimpleHTTPRequestHandler
+from io import BytesIO as StringIO
 
 from nikola.plugin_categories import Command
 from nikola.utils import dns_sd
@@ -70,7 +61,7 @@ class CommandServe(Command):
             'long': 'port',
             'default': 8000,
             'type': int,
-            'help': 'Port number (default: 8000)',
+            'help': 'Port number',
         },
         {
             'name': 'address',
@@ -78,7 +69,7 @@ class CommandServe(Command):
             'long': 'address',
             'type': str,
             'default': '',
-            'help': 'Address to bind (default: 0.0.0.0 -- all local IPv4 interfaces)',
+            'help': 'Address to bind, defaults to all local IPv4 interfaces',
         },
         {
             'name': 'detach',
@@ -139,14 +130,16 @@ class CommandServe(Command):
             httpd = OurHTTP((options['address'], options['port']),
                             OurHTTPRequestHandler)
             sa = httpd.socket.getsockname()
-            self.logger.info("Serving HTTP on {0} port {1}...".format(*sa))
+            if ipv6:
+                server_url = "http://[{0}]:{1}/".format(*sa)
+            else:
+                server_url = "http://{0}:{1}/".format(*sa)
+            self.logger.info("Serving on {0} ...".format(server_url))
+
             if options['browser']:
-                if ipv6:
-                    server_url = "http://[{0}]:{1}/".format(*sa)
-                elif sa[0] == '0.0.0.0':
+                # Some browsers fail to load 0.0.0.0 (Issue #2755)
+                if sa[0] == '0.0.0.0':
                     server_url = "http://127.0.0.1:{1}/".format(*sa)
-                else:
-                    server_url = "http://{0}:{1}/".format(*sa)
                 self.logger.info("Opening {0} in the default web browser...".format(server_url))
                 webbrowser.open(server_url)
             if options['detach']:
@@ -214,11 +207,11 @@ class OurHTTPRequestHandler(SimpleHTTPRequestHandler):
         path = self.translate_path(self.path)
         f = None
         if os.path.isdir(path):
-            if not self.path.endswith('/'):
+            path_parts = list(self.path.partition('?'))
+            if not path_parts[0].endswith('/'):
                 # redirect browser - doing basically what apache does
-                self.send_response(301)
-                path_parts = list(self.path.partition('?'))
                 path_parts[0] += '/'
+                self.send_response(301)
                 self.send_header("Location", ''.join(path_parts))
                 # begin no-cache patch
                 # For redirects.  With redirects, caching is even worse and can
@@ -253,7 +246,7 @@ class OurHTTPRequestHandler(SimpleHTTPRequestHandler):
             # Comment out any <base> to allow local resolution of relative URLs.
             data = f.read().decode('utf8')
             f.close()
-            data = re.sub(r'<base\s([^>]*)>', '<!--base \g<1>-->', data, flags=re.IGNORECASE)
+            data = re.sub(r'<base\s([^>]*)>', r'<!--base \g<1>-->', data, flags=re.IGNORECASE)
             data = data.encode('utf8')
             f = StringIO()
             f.write(data)

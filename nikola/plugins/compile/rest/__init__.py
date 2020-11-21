@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2018 Roberto Alsina and others.
+# Copyright © 2012-2020 Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -27,9 +27,8 @@
 """reStructuredText compiler for Nikola."""
 
 import io
+import logging
 import os
-import logbook
-import logbook.base
 
 import docutils.core
 import docutils.nodes
@@ -45,7 +44,6 @@ from nikola.nikola import LEGAL_VALUES
 from nikola.metadata_extractors import MetaCondition
 from nikola.plugin_categories import PageCompiler
 from nikola.utils import (
-    unicode_str,
     makedirs,
     write_metadata,
     LocaleBorg,
@@ -71,9 +69,9 @@ class CompileRest(PageCompiler):
 
         # Silence reST errors, some of which are due to a different
         # environment. Real issues will be reported while compiling.
-        null_logger = logbook.Logger('NULL')
-        null_logger.handlers = [logbook.NullHandler()]
-        with io.open(source_path, 'r', encoding='utf-8') as inf:
+        null_logger = logging.getLogger('NULL')
+        null_logger.setLevel(1000)
+        with io.open(source_path, 'r', encoding='utf-8-sig') as inf:
             data = inf.read()
             _, _, _, document = rst2html(data, logger=null_logger, source_path=source_path, transforms=self.site.rst_transforms)
         meta = {}
@@ -125,7 +123,8 @@ class CompileRest(PageCompiler):
             'math_output': 'mathjax /assets/js/mathjax.js',
             'template': default_template_path,
             'language_code': LEGAL_VALUES['DOCUTILS_LOCALES'].get(LocaleBorg().current_lang, 'en'),
-            'doctitle_xform': not self.site.config.get('USE_REST_DOCINFO_METADATA'),
+            'doctitle_xform': self.site.config.get('USE_REST_DOCINFO_METADATA'),
+            'file_insertion_enabled': self.site.config.get('REST_FILE_INSERTION_ENABLED'),
         }
 
         from nikola import shortcodes as sc
@@ -134,7 +133,7 @@ class CompileRest(PageCompiler):
             self.site.rst_transforms.append(RemoveDocinfo)
         output, error_level, deps, _ = rst2html(
             new_data, settings_overrides=settings_overrides, logger=self.logger, source_path=source_path, l_add_ln=add_ln, transforms=self.site.rst_transforms)
-        if not isinstance(output, unicode_str):
+        if not isinstance(output, str):
             # To prevent some weird bugs here or there.
             # Original issue: empty files.  `output` became a bytestring.
             output = output.decode('utf-8')
@@ -146,8 +145,8 @@ class CompileRest(PageCompiler):
         """Compile the source file into HTML and save as dest."""
         makedirs(os.path.dirname(dest))
         error_level = 100
-        with io.open(dest, "w+", encoding="utf8") as out_file:
-            with io.open(source, "r", encoding="utf8") as in_file:
+        with io.open(dest, "w+", encoding="utf-8") as out_file:
+            with io.open(source, "r", encoding="utf-8-sig") as in_file:
                 data = in_file.read()
                 output, error_level, deps, shortcode_deps = self.compile_string(data, source, is_two_file, post, lang)
                 out_file.write(output)
@@ -176,18 +175,21 @@ class CompileRest(PageCompiler):
         makedirs(os.path.dirname(path))
         if not content.endswith('\n'):
             content += '\n'
-        with io.open(path, "w+", encoding="utf8") as fd:
+        with io.open(path, "w+", encoding="utf-8") as fd:
             if onefile:
                 fd.write(write_metadata(metadata, comment_wrap=False, site=self.site, compiler=self))
             fd.write(content)
 
     def set_site(self, site):
         """Set Nikola site."""
-        super(CompileRest, self).set_site(site)
+        super().set_site(site)
         self.config_dependencies = []
         for plugin_info in self.get_compiler_extensions():
             self.config_dependencies.append(plugin_info.name)
             plugin_info.plugin_object.short_help = plugin_info.description
+
+        if not site.debug:
+            self.logger.level = logging.WARNING
 
 
 def get_observer(settings):
@@ -198,7 +200,7 @@ def get_observer(settings):
         Error code mapping:
 
         +----------+----------+
-        | docutils |  logbook |
+        | docutils |  logging |
         +----------+----------+
         |    DEBUG |    DEBUG |
         |     INFO |     INFO |
@@ -208,11 +210,11 @@ def get_observer(settings):
         +----------+----------+
         """
         errormap = {
-            docutils.utils.Reporter.DEBUG_LEVEL: logbook.base.DEBUG,
-            docutils.utils.Reporter.INFO_LEVEL: logbook.base.INFO,
-            docutils.utils.Reporter.WARNING_LEVEL: logbook.base.WARNING,
-            docutils.utils.Reporter.ERROR_LEVEL: logbook.base.ERROR,
-            docutils.utils.Reporter.SEVERE_LEVEL: logbook.base.CRITICAL
+            docutils.utils.Reporter.DEBUG_LEVEL: logging.DEBUG,
+            docutils.utils.Reporter.INFO_LEVEL: logging.INFO,
+            docutils.utils.Reporter.WARNING_LEVEL: logging.WARNING,
+            docutils.utils.Reporter.ERROR_LEVEL: logging.ERROR,
+            docutils.utils.Reporter.SEVERE_LEVEL: logging.CRITICAL
         }
         text = docutils.nodes.Element.astext(msg)
         line = msg['line'] + settings['add_ln'] if 'line' in msg else ''
@@ -226,6 +228,8 @@ def get_observer(settings):
 
 class NikolaReader(docutils.readers.standalone.Reader):
     """Nikola-specific docutils reader."""
+
+    config_section = 'nikola'
 
     def __init__(self, *args, **kwargs):
         """Initialize the reader."""
@@ -272,7 +276,7 @@ def add_node(node, visit_function=None, depart_function=None):
                 self.site = site
                 directives.register_directive('math', MathDirective)
                 add_node(MathBlock, visit_Math, depart_Math)
-                return super(Plugin, self).set_site(site)
+                return super().set_site(site)
 
         class MathDirective(Directive):
             def run(self):
@@ -296,11 +300,47 @@ def add_node(node, visit_function=None, depart_function=None):
         setattr(docutils.writers.html5_polyglot.HTMLTranslator, 'depart_' + node.__name__, depart_function)
 
 
+# Output <code> for ``double backticks``. (Code and extra logic based on html4css1 translator)
+def visit_literal(self, node):
+    """Output <code> for double backticks."""
+    # special case: "code" role
+    classes = node.get('classes', [])
+    if 'code' in classes:
+        # filter 'code' from class arguments
+        node['classes'] = [cls for cls in classes if cls != 'code']
+        self.body.append(self.starttag(node, 'code', ''))
+        return
+    self.body.append(
+        self.starttag(node, 'code', '', CLASS='docutils literal'))
+    text = node.astext()
+    for token in self.words_and_spaces.findall(text):
+        if token.strip():
+            # Protect text like "--an-option" and the regular expression
+            # ``[+]?(\d+(\.\d*)?|\.\d+)`` from bad line wrapping
+            if self.in_word_wrap_point.search(token):
+                self.body.append('<span class="pre">%s</span>'
+                                 % self.encode(token))
+            else:
+                self.body.append(self.encode(token))
+        elif token in ('\n', ' '):
+            # Allow breaks at whitespace:
+            self.body.append(token)
+        else:
+            # Protect runs of multiple spaces; the last space can wrap:
+            self.body.append('&nbsp;' * (len(token) - 1) + ' ')
+    self.body.append('</code>')
+    # Content already processed:
+    raise docutils.nodes.SkipNode
+
+
+setattr(docutils.writers.html5_polyglot.HTMLTranslator, 'visit_literal', visit_literal)
+
+
 def rst2html(source, source_path=None, source_class=docutils.io.StringInput,
              destination_path=None, reader=None,
              parser=None, parser_name='restructuredtext', writer=None,
-             writer_name='html', settings=None, settings_spec=None,
-             settings_overrides=None, config_section=None,
+             writer_name='html5_polyglot', settings=None, settings_spec=None,
+             settings_overrides=None, config_section='nikola',
              enable_exit_status=None, logger=None, l_add_ln=0, transforms=None):
     """Set up & run a ``Publisher``, and return a dictionary of document parts.
 

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2013-2018 Udo Spallek, Roberto Alsina and others.
+# Copyright © 2013-2020 Udo Spallek, Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -79,7 +79,7 @@ class PostListShortcode(ShortcodePlugin):
         * clause: attribute comparison_operator value (spaces optional)
           * attribute: year, month, day, hour, month, second, weekday, isoweekday; or empty for full datetime
           * comparison_operator: == != <= >= < >
-          * value: integer, 'now' or dateutil-compatible date input
+          * value: integer, 'now', 'today', or dateutil-compatible date input
 
     ``tags`` : string [, string...]
         Filter posts to show only posts having at least one of the ``tags``.
@@ -122,7 +122,7 @@ class PostListShortcode(ShortcodePlugin):
 
     def set_site(self, site):
         """Set the site."""
-        super(PostListShortcode, self).set_site(site)
+        super().set_site(site)
         site.register_shortcode('post-list', self.handler)
 
     def handler(self, start=None, stop=None, reverse=False, tags=None, require_all_tags=False, categories=None,
@@ -217,9 +217,6 @@ class PostListShortcode(ShortcodePlugin):
                 self_post.register_depfile(bp, lang=lang)
 
             posts += [post]
-
-        if not posts:
-            return '', []
 
         template_deps = site.template_system.template_deps(template)
         if state:

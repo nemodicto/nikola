@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2018 Roberto Alsina and others.
+# Copyright © 2012-2020 Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -29,7 +29,7 @@
 from docutils import nodes
 from docutils.parsers.rst import roles
 
-from nikola.utils import split_explicit_title, LOGGER
+from nikola.utils import split_explicit_title, LOGGER, slugify
 from nikola.plugin_categories import RestExtension
 
 
@@ -44,14 +44,11 @@ class Plugin(RestExtension):
         roles.register_canonical_role('doc', doc_role)
         self.site.register_shortcode('doc', doc_shortcode)
         doc_role.site = site
-        return super(Plugin, self).set_site(site)
+        return super().set_site(site)
 
 
-def _doc_link(rawtext, text, options={}, content=[]):
-    """Handle the doc role."""
-    # split link's text and post's slug in role content
-    has_explicit_title, title, slug = split_explicit_title(text)
-    # check if the slug given is part of our blog posts/pages
+def _find_post(slug):
+    """Find a post with the given slug in posts or pages."""
     twin_slugs = False
     post = None
     for p in doc_role.site.timeline:
@@ -61,6 +58,23 @@ def _doc_link(rawtext, text, options={}, content=[]):
             else:
                 twin_slugs = True
                 break
+    return post, twin_slugs
+
+
+def _doc_link(rawtext, text, options={}, content=[]):
+    """Handle the doc role."""
+    # split link's text and post's slug in role content
+    has_explicit_title, title, slug = split_explicit_title(text)
+    if '#' in slug:
+        slug, fragment = slug.split('#', 1)
+    else:
+        fragment = None
+
+    # Look for the unslugified input first, then try to slugify (Issue #3450)
+    post, twin_slugs = _find_post(slug)
+    if post is None:
+        slug = slugify(slug)
+        post, twin_slugs = _find_post(slug)
 
     try:
         if post is None:
@@ -72,6 +86,8 @@ def _doc_link(rawtext, text, options={}, content=[]):
         # use post's title as link's text
         title = post.title()
     permalink = post.permalink()
+    if fragment:
+        permalink += '#' + fragment
 
     return True, twin_slugs, title, permalink, slug
 
@@ -83,7 +99,7 @@ def doc_role(name, rawtext, text, lineno, inliner, options={}, content=[]):
         if twin_slugs:
             inliner.reporter.warning(
                 'More than one post with the same slug. Using "{0}"'.format(permalink))
-            LOGGER.warn(
+            LOGGER.warning(
                 'More than one post with the same slug. Using "{0}" for doc role'.format(permalink))
         node = make_link_node(rawtext, title, permalink, options)
         return [node], []
@@ -101,7 +117,7 @@ def doc_shortcode(*args, **kwargs):
     success, twin_slugs, title, permalink, slug = _doc_link(text, text, LOGGER)
     if success:
         if twin_slugs:
-            LOGGER.warn(
+            LOGGER.warning(
                 'More than one post with the same slug. Using "{0}" for doc shortcode'.format(permalink))
         return '<a href="{0}">{1}</a>'.format(permalink, title)
     else:

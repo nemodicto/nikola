@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2013-2018 Damián Avila, Chris Warrick and others.
+# Copyright © 2013-2020 Damián Avila, Chris Warrick and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -31,11 +31,13 @@ import json
 import os
 
 try:
+    import nbconvert
     from nbconvert.exporters import HTMLExporter
     import nbformat
     current_nbformat = nbformat.current_nbformat
     from jupyter_client import kernelspec
     from traitlets.config import Config
+    NBCONVERT_VERSION_MAJOR = int(nbconvert.__version__.partition(".")[0])
     flag = True
 except ImportError:
     flag = None
@@ -57,10 +59,13 @@ class CompileIPynb(PageCompiler):
     def _compile_string(self, nb_json):
         """Export notebooks as HTML strings."""
         self._req_missing_ipynb()
-        c = Config(self.site.config['IPYNB_CONFIG'])
-        c.update(get_default_jupyter_config())
+        c = Config(get_default_jupyter_config())
+        c.merge(Config(self.site.config['IPYNB_CONFIG']))
         if 'template_file' not in self.site.config['IPYNB_CONFIG'].get('Exporter', {}):
-            c['Exporter']['template_file'] = 'basic.tpl'  # not a typo
+            if NBCONVERT_VERSION_MAJOR >= 6:
+                c['Exporter']['template_file'] = 'classic/base.html.j2'
+            else:
+                c['Exporter']['template_file'] = 'basic.tpl'  # not a typo
         exportHtml = HTMLExporter(config=c)
         body, _ = exportHtml.from_notebook_node(nb_json)
         return body
@@ -82,10 +87,12 @@ class CompileIPynb(PageCompiler):
     def compile(self, source, dest, is_two_file=False, post=None, lang=None):
         """Compile the source file into HTML and save as dest."""
         makedirs(os.path.dirname(dest))
-        with io.open(dest, "w+", encoding="utf8") as out_file:
-            with io.open(source, "r", encoding="utf8") as in_file:
+        with io.open(dest, "w+", encoding="utf-8") as out_file:
+            with io.open(source, "r", encoding="utf-8-sig") as in_file:
                 nb_str = in_file.read()
-            output, shortcode_deps = self.compile_string(nb_str, is_two_file, post, lang)
+            output, shortcode_deps = self.compile_string(nb_str, source,
+                                                         is_two_file, post,
+                                                         lang)
             out_file.write(output)
         if post is None:
             if shortcode_deps:
@@ -105,7 +112,7 @@ class CompileIPynb(PageCompiler):
         if lang is None:
             lang = LocaleBorg().current_lang
         source = post.translated_source_path(lang)
-        with io.open(source, "r", encoding="utf8") as in_file:
+        with io.open(source, "r", encoding="utf-8-sig") as in_file:
             nb_json = nbformat.read(in_file, current_nbformat)
         # Metadata might not exist in two-file posts or in hand-crafted
         # .ipynb files.
@@ -135,7 +142,7 @@ class CompileIPynb(PageCompiler):
 
             if kernel is None:
                 kernel = self.default_kernel
-                self.logger.notice('No kernel specified, assuming "{0}".'.format(kernel))
+                self.logger.warning('No kernel specified, assuming "{0}".'.format(kernel))
 
             IPYNB_KERNELS = {}
             ksm = kernelspec.KernelSpecManager()
@@ -154,7 +161,7 @@ class CompileIPynb(PageCompiler):
         if onefile:
             nb["metadata"]["nikola"] = metadata
 
-        with io.open(path, "w+", encoding="utf8") as fd:
+        with io.open(path, "w+", encoding="utf-8") as fd:
             nbformat.write(nb, fd, 4)
 
 

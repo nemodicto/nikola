@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2018 Roberto Alsina and others.
+# Copyright © 2012-2020 Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -84,8 +84,7 @@ class CommandPlugin(Command):
             'short': 'u',
             'long': 'url',
             'type': str,
-            'help': "URL for the plugin repository (default: "
-                    "https://plugins.getnikola.com/v8/plugins.json)",
+            'help': "URL for the plugin repository",
             'default': 'https://plugins.getnikola.com/v8/plugins.json'
         },
         {
@@ -137,11 +136,11 @@ class CommandPlugin(Command):
             self.output_dir = options.get('output_dir')
         else:
             if not self.site.configured and not user_mode and install:
-                LOGGER.notice('No site found, assuming --user')
+                LOGGER.warning('No site found, assuming --user')
                 user_mode = True
 
             if user_mode:
-                self.output_dir = os.path.expanduser('~/.nikola/plugins')
+                self.output_dir = os.path.expanduser(os.path.join('~', '.nikola', 'plugins'))
             else:
                 self.output_dir = 'plugins'
 
@@ -249,14 +248,14 @@ class CommandPlugin(Command):
 
         reqpath = os.path.join(dest_path, 'requirements.txt')
         if os.path.exists(reqpath):
-            LOGGER.notice('This plugin has Python dependencies.')
+            LOGGER.warning('This plugin has Python dependencies.')
             LOGGER.info('Installing dependencies with pip...')
             try:
                 subprocess.check_call((sys.executable, '-m', 'pip', 'install', '-r', reqpath))
             except subprocess.CalledProcessError:
                 LOGGER.error('Could not install the dependencies.')
                 print('Contents of the requirements.txt file:\n')
-                with io.open(reqpath, 'r', encoding='utf-8') as fh:
+                with io.open(reqpath, 'r', encoding='utf-8-sig') as fh:
                     print(utils.indent(fh.read(), 4 * ' '))
                 print('You have to install those yourself or through a '
                       'package manager.')
@@ -265,11 +264,11 @@ class CommandPlugin(Command):
 
         reqnpypath = os.path.join(dest_path, 'requirements-nonpy.txt')
         if os.path.exists(reqnpypath):
-            LOGGER.notice('This plugin has third-party '
-                          'dependencies you need to install '
-                          'manually.')
+            LOGGER.warning('This plugin has third-party '
+                           'dependencies you need to install '
+                           'manually.')
             print('Contents of the requirements-nonpy.txt file:\n')
-            with io.open(reqnpypath, 'r', encoding='utf-8') as fh:
+            with io.open(reqnpypath, 'r', encoding='utf-8-sig') as fh:
                 for l in fh.readlines():
                     i, j = l.split('::')
                     print(utils.indent(i.strip(), 4 * ' '))
@@ -281,11 +280,11 @@ class CommandPlugin(Command):
 
         req_plug_path = os.path.join(dest_path, 'requirements-plugins.txt')
         if os.path.exists(req_plug_path):
-            LOGGER.notice('This plugin requires other Nikola plugins.')
+            LOGGER.info('This plugin requires other Nikola plugins.')
             LOGGER.info('Installing plugins...')
             plugin_failure = False
             try:
-                with io.open(req_plug_path, 'r', encoding='utf-8') as inf:
+                with io.open(req_plug_path, 'r', encoding='utf-8-sig') as inf:
                     for plugname in inf.readlines():
                         plugin_failure = self.do_install(url, plugname.strip(), show_install_notes) != 0
             except Exception:
@@ -293,7 +292,7 @@ class CommandPlugin(Command):
             if plugin_failure:
                 LOGGER.error('Could not install a plugin.')
                 print('Contents of the requirements-plugins.txt file:\n')
-                with io.open(req_plug_path, 'r', encoding='utf-8') as fh:
+                with io.open(req_plug_path, 'r', encoding='utf-8-sig') as fh:
                     print(utils.indent(fh.read(), 4 * ' '))
                 print('You have to install those yourself manually.')
             else:
@@ -301,15 +300,13 @@ class CommandPlugin(Command):
 
         confpypath = os.path.join(dest_path, 'conf.py.sample')
         if os.path.exists(confpypath) and show_install_notes:
-            LOGGER.notice('This plugin has a sample config file.  Integrate it with yours in order to make this plugin work!')
+            LOGGER.warning('This plugin has a sample config file.  Integrate it with yours in order to make this plugin work!')
             print('Contents of the conf.py.sample file:\n')
-            with io.open(confpypath, 'r', encoding='utf-8') as fh:
+            with io.open(confpypath, 'r', encoding='utf-8-sig') as fh:
                 if self.site.colorful:
-                    print(utils.indent(pygments.highlight(
-                        fh.read(), PythonLexer(), TerminalFormatter()),
-                        4 * ' '))
+                    print(pygments.highlight(fh.read(), PythonLexer(), TerminalFormatter()))
                 else:
-                    print(utils.indent(fh.read(), 4 * ' '))
+                    print(fh.read())
         return 0
 
     def do_uninstall(self, name):
