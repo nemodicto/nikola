@@ -63,7 +63,7 @@ class CopyAssets(Task):
                 ".codetable td.code, td.code { padding-left: 0.5em; }\n"),
         }
         tasks = {}
-        code_css_path = os.path.join(kw['output_folder'], 'assets', 'css', 'code.css')
+        code_css_path = os.path.join(kw['output_folder'], 'css', 'code.css')
         code_css_input = utils.get_asset_path('assets/css/code.css',
                                               themes=kw['themes'],
                                               files_folders=kw['files_folders'], output_dir=None)
@@ -79,7 +79,7 @@ class CopyAssets(Task):
 
         for theme_name in kw['themes']:
             src = os.path.join(utils.get_theme_path(theme_name), 'assets')
-            dst = os.path.join(kw['output_folder'], 'assets')
+            dst = kw['output_folder']
             for task in utils.copy_tree(src, dst):
                 asset_name = os.path.relpath(task['name'], dst)
                 if task['name'] in tasks or asset_name in ignored_assets:
