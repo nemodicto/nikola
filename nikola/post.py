@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2020 Roberto Alsina and others.
+# Copyright © 2012-2022 Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -54,7 +54,8 @@ from .utils import (
     to_datetime,
     demote_headers,
     get_translation_candidate,
-    map_metadata
+    map_metadata,
+    bool_from_meta,
 )
 
 try:
@@ -252,7 +253,7 @@ class Post(object):
         self.post_name = os.path.splitext(source_path)[0]  # posts/blah
         _relpath = os.path.relpath(self.post_name)
         if _relpath != self.post_name:
-            self.post_name = _relpath.replace('..' + os.sep, '_..' + os.sep)
+            self.post_name = _relpath.replace('..' + os.sep, '__dotdot__' + os.sep)
         # cache[\/]posts[\/]blah.html
         self.base_path = os.path.join(self.config['CACHE_FOLDER'], self.post_name + ".html")
         # cache/posts/blah.html
@@ -427,13 +428,14 @@ class Post(object):
 
     def has_pretty_url(self, lang):
         """Check if this page has a pretty URL."""
-        m = self.meta[lang].get('pretty_url', '')
-        if m:
-            # match is a non-empty string, overides anything
-            return m.lower() == 'true' or m.lower() == 'yes'
-        else:
+        meta_value = bool_from_meta(self.meta[lang], 'pretty_url')
+
+        if meta_value is None:
             # use PRETTY_URLS, unless the slug is 'index'
             return self.pretty_urls and self.meta[lang]['slug'] != 'index'
+        else:
+            # override with meta value
+            return meta_value
 
     def _has_pretty_url(self, lang):
         """Check if this page has a pretty URL."""
@@ -450,13 +452,13 @@ class Post(object):
             return True
         lang = nikola.utils.LocaleBorg().current_lang
         if self.is_translation_available(lang):
-            if self.meta[lang].get('has_math') in ('true', 'True', 'yes', '1', 1, True):
+            if bool_from_meta(self.meta[lang], 'has_math'):
                 return True
             if self.config['USE_TAG_METADATA']:
                 return 'mathjax' in self.tags_for_language(lang)
         # If it has math in ANY other language, enable it. Better inefficient than broken.
         for lang in self.translated_to:
-            if self.meta[lang].get('has_math') in ('true', 'True', 'yes', '1', 1, True):
+            if bool_from_meta(self.meta[lang], 'has_math'):
                 return True
         if self.config['USE_TAG_METADATA']:
             return 'mathjax' in self.alltags
@@ -612,9 +614,9 @@ class Post(object):
         if add not in {'fragment', 'page', 'both'}:
             raise Exception("Add parameter is '{0}', but must be either 'fragment', 'page', or 'both'.".format(add))
         if add == 'fragment' or add == 'both':
-            self._dependency_file_fragment[lang].append((type(dependency) != str, dependency))
+            self._dependency_file_fragment[lang].append((not isinstance(dependency, str), dependency))
         if add == 'page' or add == 'both':
-            self._dependency_file_page[lang].append((type(dependency) != str, dependency))
+            self._dependency_file_page[lang].append((not isinstance(dependency, str), dependency))
 
     def add_dependency_uptodate(self, dependency, is_callable=False, add='both', lang=None):
         """Add a dependency for task's ``uptodate`` for tasks using that post.
@@ -677,7 +679,7 @@ class Post(object):
                 # can add directly
                 result = dep[1]
             # if result is a list, add its contents
-            if type(result) == list:
+            if isinstance(result, list):
                 deps.extend(result)
             else:
                 deps.append(result)
@@ -908,10 +910,7 @@ class Post(object):
         if self.hyphenate:
             hyphenate(document, real_lang)
 
-        try:
-            data = lxml.html.tostring(document.body, encoding='unicode')
-        except Exception:
-            data = lxml.html.tostring(document, encoding='unicode')
+        data = utils.html_tostring_fragment(document)
 
         if teaser_only:
             teaser_regexp = self.config.get('TEASER_REGEXP', TEASER_REGEXP)
@@ -934,10 +933,7 @@ class Post(object):
                         post_title=self.title(lang))
                 # This closes all open tags and sanitizes the broken HTML
                 document = lxml.html.fromstring(teaser)
-                try:
-                    data = lxml.html.tostring(document.body, encoding='unicode')
-                except IndexError:
-                    data = lxml.html.tostring(document, encoding='unicode')
+                data = utils.html_tostring_fragment(document)
 
         if data and strip_html:
             try:
@@ -950,11 +946,11 @@ class Post(object):
             if self.demote_headers:
                 # see above
                 try:
-                    document = lxml.html.fromstring(data)
+                    document = lxml.html.fragment_fromstring(data, "body")
                     demote_headers(document, self.demote_headers)
-                    data = lxml.html.tostring(document.body, encoding='unicode')
+                    data = utils.html_tostring_fragment(document)
                 except (lxml.etree.ParserError, IndexError):
-                    data = lxml.html.tostring(document, encoding='unicode')
+                    pass
 
         return data
 

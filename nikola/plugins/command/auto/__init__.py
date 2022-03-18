@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2020 Chris Warrick, Roberto Alsina and others.
+# Copyright © 2012-2022 Chris Warrick, Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -37,6 +37,7 @@ import sys
 import typing
 import webbrowser
 
+import blinker
 import pkg_resources
 
 from nikola.plugin_categories import Command
@@ -122,7 +123,8 @@ class CommandAuto(Command):
             'long': 'process',
             'default': 0,
             'type': int,
-            'help': 'Number of subprocesses (nikola build argument)'
+            'help': 'Number of subprocesses',
+            'section': 'Arguments passed to `nikola build`'
         },
         {
             'name': 'parallel-type',
@@ -130,8 +132,25 @@ class CommandAuto(Command):
             'long': 'parallel-type',
             'default': 'process',
             'type': str,
-            'help': "Parallelization mode ('process' or 'thread', nikola build argument)"
+            'help': "Parallelization mode ('process' or 'thread')",
+            'section': 'Arguments passed to `nikola build`'
         },
+        {
+            'name': 'db-file',
+            'long': 'db-file',
+            'default': '.doit.db',
+            'type': str,
+            'help': 'Database file',
+            'section': 'Arguments passed to `nikola build`'
+        },
+        {
+            'name': 'backend',
+            'long': 'backend',
+            'default': 'dbm',
+            'type': str,
+            'help': "Database backend ('dbm', 'json', 'sqlite3')",
+            'section': 'Arguments passed to `nikola build`'
+        }
     ]
 
     def _execute(self, options, args):
@@ -149,6 +168,8 @@ class CommandAuto(Command):
         elif Observer is None:
             req_missing(['watchdog'], 'use the "auto" command')
 
+        blinker.signal('auto_command_starting').send(self.site)
+
         if sys.argv[0].endswith('__main__.py'):
             self.nikola_cmd = [sys.executable, '-m', 'nikola', 'build']
         else:
@@ -160,6 +181,10 @@ class CommandAuto(Command):
         if options and options.get('process'):
             self.nikola_cmd += ['--process={}'.format(options['process']),
                                 '--parallel-type={}'.format(options['parallel-type'])]
+
+        if options:
+            self.nikola_cmd += ['--db-file={}'.format(options['db-file']),
+                                '--backend={}'.format(options['backend'])]
 
         port = options and options.get('port')
         self.snippet = '''<script>document.write('<script src="http://'
@@ -184,6 +209,7 @@ class CommandAuto(Command):
             watched.add(item)
         for item in self.site._plugin_places:
             watched.add(item)
+        watched |= self.site.registered_auto_watched_folders
         # Nikola itself (useful for developers)
         watched.add(pkg_resources.resource_filename('nikola', ''))
 

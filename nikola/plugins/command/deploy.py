@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2020 Roberto Alsina and others.
+# Copyright © 2012-2022 Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -54,6 +54,8 @@ class CommandDeploy(Command):
         if last_deploy is not None:
             last_deploy = dateutil.parser.parse(last_deploy)
             clean = False
+        else:
+            clean = True
 
         if self.site.config['COMMENT_SYSTEM'] and self.site.config['COMMENT_SYSTEM_ID'] == 'nikolademo':
             self.logger.warning("\nWARNING WARNING WARNING WARNING\n"
@@ -96,6 +98,8 @@ class CommandDeploy(Command):
         self.logger.info("Successful deployment")
 
         new_deploy = datetime.utcnow()
+        if last_deploy is None:
+            last_deploy = new_deploy
         self._emit_deploy_event(last_deploy, new_deploy, clean, undeployed_posts)
 
         # Store timestamp of successful deployment

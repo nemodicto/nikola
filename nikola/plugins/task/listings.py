@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2020 Roberto Alsina and others.
+# Copyright © 2012-2022 Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -179,7 +179,7 @@ class Listings(Task):
 
         yield self.group_task()
 
-        template_deps = self.site.template_system.template_deps('listing.tmpl')
+        template_deps = self.site.template_system.template_deps('listing.tmpl', self.site.GLOBAL_CONTEXT)
 
         for input_folder, output_folder in self.kw['listings_folders'].items():
             for root, dirs, files in os.walk(input_folder, followlinks=True):

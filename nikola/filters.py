@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2020 Roberto Alsina and others.
+# Copyright © 2012-2022 Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -268,8 +268,11 @@ def minify_lines(data):
 
 def _run_typogrify(data, typogrify_filters, ignore_tags=None):
     """Run typogrify with ignore support."""
+    default_ignore_tags = ["title", ".math"]
     if ignore_tags is None:
-        ignore_tags = ["title"]
+        ignore_tags = default_ignore_tags
+    else:
+        ignore_tags = ignore_tags + default_ignore_tags
 
     data = _normalize_html(data)
 
@@ -328,11 +331,13 @@ def typogrify_sans_widont(data):
 
 
 @apply_to_text_file
-def typogrify_custom(data, typogrify_filters, ignore_tags=None):
-    """Run typogrify with a custom list of fliter functions."""
+def typogrify_custom(data, typogrify_filters=None, ignore_tags=None):
+    """Run typogrify with a custom list of filter functions."""
     if typo is None:
         req_missing(['typogrify'], 'use the typogrify filter', optional=True)
         return data
+    if typogrify_filters is None:
+        typogrify_filters = [typo.amp, typo.widont, typo.smartypants, typo.caps, typo.initial_quotes]
     return _run_typogrify(data, typogrify_filters, ignore_tags)
 
 

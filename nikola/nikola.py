@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2020 Roberto Alsina and others.
+# Copyright © 2012-2022 Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -66,6 +66,7 @@ from .plugin_categories import (
     TemplateSystem,
     SignalHandler,
     ConfigPlugin,
+    CommentSystem,
     PostScanner,
     Taxonomy,
 )
@@ -133,10 +134,12 @@ LEGAL_VALUES = {
         ('ja', '!jp'): 'Japanese',
         'ko': 'Korean',
         'lt': 'Lithuanian',
+        'mi': 'Maori',
         'ml': 'Malayalam',
         'mr': 'Marathi',
         'nb': 'Norwegian (Bokmål)',
         'nl': 'Dutch',
+        'oc': 'Occitan',
         'pa': 'Punjabi',
         'pl': 'Polish',
         'pt': 'Portuguese',
@@ -203,10 +206,12 @@ LEGAL_VALUES = {
         'ja': 'ja',
         'ko': 'ko',
         'lt': 'lt',
+        'mi': 'mi',
         'ml': 'ml',
         'mr': 'mr',
         'nb': 'nb',
         'nl': 'nl',
+        'oc': 'oc',
         'pa': 'pa',
         'pl': 'pl',
         'pt': 'pt',
@@ -414,6 +419,7 @@ class Nikola(object):
         self.injected_deps = defaultdict(list)
         self.shortcode_registry = {}
         self.metadata_extractors_by = default_metadata_extractors_by()
+        self.registered_auto_watched_folders = set()
 
         self.rst_transforms = []
         self.template_hooks = {
@@ -680,6 +686,10 @@ class Nikola(object):
                                       'FEED_READ_MORE_LINK',
                                       'INDEXES_TITLE',
                                       'CATEGORY_DESTPATH_NAMES',
+                                      'CATEGORY_TITLES',
+                                      'CATEGORY_DESCRIPTIONS',
+                                      'TAG_TITLES',
+                                      'TAG_DESCRIPTIONS',
                                       'INDEXES_PAGES',
                                       'INDEXES_PRETTY_PAGE_URL',
                                       'THEME_CONFIG',
@@ -726,6 +736,8 @@ class Nikola(object):
                                             'rss_path',
                                             'rss_filename_base',
                                             'atom_filename_base',
+                                            'index_read_more_link',
+                                            'feed_read_more_link',
                                             )
         # WARNING: navigation_(alt_)links SHOULD NOT be added to the list above.
         #          Themes ask for [lang] there and we should provide it.
@@ -799,7 +811,7 @@ class Nikola(object):
         for val in self.config['DATE_FORMAT'].values.values():
             if '%' in val:
                 utils.LOGGER.error('The DATE_FORMAT setting needs to be upgraded.')
-                utils.LOGGER.warning("Nikola now uses CLDR-style date strings. http://cldr.unicode.org/translation/date-time")
+                utils.LOGGER.warning("Nikola now uses CLDR-style date strings. http://cldr.unicode.org/translation/date-time-1/date-time")
                 utils.LOGGER.warning("Example: %Y-%m-%d %H:%M ==> yyyy-MM-dd HH:mm")
                 utils.LOGGER.warning("(note it’s different to what moment.js uses!)")
                 sys.exit(1)
@@ -1028,6 +1040,7 @@ class Nikola(object):
             "ShortcodePlugin": ShortcodePlugin,
             "SignalHandler": SignalHandler,
             "ConfigPlugin": ConfigPlugin,
+            "CommentSystem": CommentSystem,
             "PostScanner": PostScanner,
             "Taxonomy": Taxonomy,
         })
@@ -1171,7 +1184,8 @@ class Nikola(object):
             self.compilers[plugin_info.name] = \
                 plugin_info.plugin_object
 
-        # Load config plugins and register templated shortcodes
+        # Load comment systems, config plugins and register templated shortcodes
+        self._activate_plugins_of_category("CommentSystem")
         self._activate_plugins_of_category("ConfigPlugin")
         self._register_templated_shortcodes()
 
@@ -1236,7 +1250,7 @@ class Nikola(object):
         self._GLOBAL_CONTEXT['translations'] = self.config.get('TRANSLATIONS')
         self._GLOBAL_CONTEXT['license'] = self.config.get('LICENSE')
         self._GLOBAL_CONTEXT['search_form'] = self.config.get('SEARCH_FORM')
-        self._GLOBAL_CONTEXT['comment_system'] = self.config.get('COMMENT_SYSTEM')
+        self._GLOBAL_CONTEXT['comment_system'] = self.config.get('COMMENT_SYSTEM') or 'dummy'
         self._GLOBAL_CONTEXT['comment_system_id'] = self.config.get('COMMENT_SYSTEM_ID')
         self._GLOBAL_CONTEXT['site_has_comments'] = bool(self.config.get('COMMENT_SYSTEM'))
         self._GLOBAL_CONTEXT['mathjax_config'] = self.config.get(
@@ -1308,6 +1322,8 @@ class Nikola(object):
         self.ALL_PAGE_DEPS['slug_author_path'] = self.config.get('SLUG_AUTHOR_PATH')
         self.ALL_PAGE_DEPS['slug_tag_path'] = self.config.get('SLUG_TAG_PATH')
         self.ALL_PAGE_DEPS['locale'] = self.config.get('LOCALE')
+        self.ALL_PAGE_DEPS['index_read_more_link'] = self.config.get('INDEX_READ_MORE_LINK')
+        self.ALL_PAGE_DEPS['feed_read_more_link'] = self.config.get('FEED_READ_MORE_LINK')
 
     def _activate_plugins_of_category(self, category):
         """Activate all the plugins of a given category and return them."""
@@ -1667,7 +1683,7 @@ class Nikola(object):
                 context[k] = context[k](context['lang'])
             output = self.template_system.render_template_to_string(t_data, context)
             if fname is not None:
-                dependencies = [fname] + self.template_system.get_deps(fname)
+                dependencies = [fname] + self.template_system.get_deps(fname, context)
             else:
                 dependencies = []
             return output, dependencies
@@ -1708,7 +1724,7 @@ class Nikola(object):
         for k in self._GLOBAL_CONTEXT_TRANSLATABLE:
             context[k] = context[k](context['lang'])
         output = self.template_system.render_template_to_string(t_data, context)
-        dependencies = self.template_system.get_string_deps(t_data)
+        dependencies = self.template_system.get_string_deps(t_data, context)
         return output, dependencies
 
     def register_shortcode(self, name, f):
@@ -2263,8 +2279,10 @@ class Nikola(object):
         """
         utils.LocaleBorg().set_locale(lang)
 
+        template_dep_context = context.copy()
+        template_dep_context.update(self.GLOBAL_CONTEXT)
         file_deps = copy(file_deps) if file_deps else []
-        file_deps += self.template_system.template_deps(template_name)
+        file_deps += self.template_system.template_deps(template_name, template_dep_context)
         file_deps = sorted(list(filter(None, file_deps)))
 
         context = copy(context) if context else {}

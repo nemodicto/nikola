@@ -106,7 +106,7 @@ class nikola_build_py(build_py):
 
 
 setup(name='Nikola',
-      version='8.1.2',
+      version='8.2.0',
       description='A modular, fast, simple, static website and blog generator',
       long_description=long_description,
       author='Roberto Alsina and others',
@@ -132,6 +132,8 @@ setup(name='Nikola',
                    'Programming Language :: Python :: 3.6',
                    'Programming Language :: Python :: 3.7',
                    'Programming Language :: Python :: 3.8',
+                   'Programming Language :: Python :: 3.9',
+                   'Programming Language :: Python :: 3.10',
                    'Topic :: Internet',
                    'Topic :: Internet :: WWW/HTTP',
                    'Topic :: Text Processing :: Markup'],

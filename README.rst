@@ -15,9 +15,6 @@ In goes content, out comes a website, ready to deploy.
 .. image:: http://img.shields.io/badge/license-MIT-green.svg
    :target: https://github.com/getnikola/nikola/blob/master/LICENSE.txt
 
-.. image:: https://build.snapcraft.io/badge/getnikola/nikola.svg
-   :target: https://build.snapcraft.io/user/getnikola/nikola
-
 Why Static Websites?
 --------------------
 
@@ -40,12 +37,12 @@ It has many features, but here are some of the nicer ones:
 * Syntax highlighting for almost any programming language or markup
 * Multilingual sites, `translated to 50 languages.`__
 * Doesn't reinvent wheels, leverages existing tools.
-* Python 3.4+ compatible.
+* Python 3.5+ compatible.
 
 .. _Nikola Handbook: https://getnikola.com/handbook.html#why-static
 __ https://users.getnikola.com/
 .. _Themable: https://themes.getnikola.com
-.. _doit: http://pydoit.org
+.. _doit: https://pydoit.org
 .. _available plugins: https://plugins.getnikola.com/
 .. _reStructuredText: https://getnikola.com/quickstart.html
 .. _image galleries: https://getnikola.com/galleries/demo/
