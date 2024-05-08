@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2022 Roberto Alsina and others.
+# Copyright © 2012-2024 Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -33,7 +33,9 @@ import functools
 import logging
 import operator
 import os
+import pathlib
 import sys
+import typing
 import mimetypes
 from collections import defaultdict
 from copy import copy
@@ -44,29 +46,15 @@ import lxml.etree
 import lxml.html
 import natsort
 import PyRSS2Gen as rss
-from pkg_resources import resource_filename
 from blinker import signal
-from yapsy.PluginManager import PluginManager
 
 from . import DEBUG, SHOW_TRACEBACKS, filters, utils, hierarchy_utils, shortcodes
 from . import metadata_extractors
 from .metadata_extractors import default_metadata_extractors_by
 from .post import Post  # NOQA
+from .plugin_manager import PluginCandidate, PluginInfo, PluginManager
 from .plugin_categories import (
-    Command,
-    LateTask,
-    PageCompiler,
-    CompilerExtension,
-    MarkdownExtension,
-    RestExtension,
-    MetadataExtractor,
-    ShortcodePlugin,
-    Task,
-    TaskMultiplier,
     TemplateSystem,
-    SignalHandler,
-    ConfigPlugin,
-    CommentSystem,
     PostScanner,
     Taxonomy,
 )
@@ -96,6 +84,7 @@ LEGAL_VALUES = {
     'DEFAULT_THEME': 'bootblog4',
     'COMMENT_SYSTEM': [
         'disqus',
+        'discourse',
         'facebook',
         'intensedebate',
         'isso',
@@ -380,6 +369,9 @@ class Nikola(object):
 
     Takes a site config as argument on creation.
     """
+
+    plugin_manager: PluginManager
+    _template_system: TemplateSystem
 
     def __init__(self, **config):
         """Initialize proper environment for running tasks."""
@@ -891,6 +883,7 @@ class Nikola(object):
                     utils.LOGGER.warning('You are currently disabling "{}", but not the following new taxonomy plugins: {}'.format(old_plugin_name, ', '.join(missing_plugins)))
                     utils.LOGGER.warning('Please also disable these new plugins or remove "{}" from the DISABLED_PLUGINS list.'.format(old_plugin_name))
                     self.config['DISABLED_PLUGINS'].extend(missing_plugins)
+
         # Special-case logic for "render_indexes" to fix #2591
         if 'render_indexes' in self.config['DISABLED_PLUGINS']:
             if 'generate_rss' in self.config['DISABLED_PLUGINS'] or self.config['GENERATE_RSS'] is False:
@@ -1000,57 +993,50 @@ class Nikola(object):
             self.state._set_site(self)
             self.cache._set_site(self)
 
-    def _filter_duplicate_plugins(self, plugin_list):
+        # WebP files have no official MIME type yet, but we need to recognize them (Issue #3671)
+        mimetypes.add_type('image/webp', '.webp')
+
+    def _filter_duplicate_plugins(self, plugin_list: typing.Iterable[PluginCandidate]):
         """Find repeated plugins and discard the less local copy."""
-        def plugin_position_in_places(plugin):
+        def plugin_position_in_places(plugin: PluginInfo):
             # plugin here is a tuple:
             # (path to the .plugin file, path to plugin module w/o .py, plugin metadata)
             for i, place in enumerate(self._plugin_places):
-                if plugin[0].startswith(place):
+                place: pathlib.Path
+                try:
+                    # Path.is_relative_to backport
+                    plugin.source_dir.relative_to(place)
                     return i
-            utils.LOGGER.warn("Duplicate plugin found in unexpected location: {}".format(plugin[0]))
+                except ValueError:
+                    pass
+            utils.LOGGER.warning("Duplicate plugin found in unexpected location: {}".format(plugin.source_dir))
             return len(self._plugin_places)
 
         plugin_dict = defaultdict(list)
-        for data in plugin_list:
-            plugin_dict[data[2].name].append(data)
+        for plugin in plugin_list:
+            plugin_dict[plugin.name].append(plugin)
         result = []
-        for _, plugins in plugin_dict.items():
+        for name, plugins in plugin_dict.items():
             if len(plugins) > 1:
                 # Sort by locality
                 plugins.sort(key=plugin_position_in_places)
                 utils.LOGGER.debug("Plugin {} exists in multiple places, using {}".format(
-                    plugins[-1][2].name, plugins[-1][0]))
+                    name, plugins[-1].source_dir))
             result.append(plugins[-1])
         return result
 
     def init_plugins(self, commands_only=False, load_all=False):
         """Load plugins as needed."""
-        self.plugin_manager = PluginManager(categories_filter={
-            "Command": Command,
-            "Task": Task,
-            "LateTask": LateTask,
-            "TemplateSystem": TemplateSystem,
-            "PageCompiler": PageCompiler,
-            "TaskMultiplier": TaskMultiplier,
-            "CompilerExtension": CompilerExtension,
-            "MarkdownExtension": MarkdownExtension,
-            "RestExtension": RestExtension,
-            "MetadataExtractor": MetadataExtractor,
-            "ShortcodePlugin": ShortcodePlugin,
-            "SignalHandler": SignalHandler,
-            "ConfigPlugin": ConfigPlugin,
-            "CommentSystem": CommentSystem,
-            "PostScanner": PostScanner,
-            "Taxonomy": Taxonomy,
-        })
-        self.plugin_manager.getPluginLocator().setPluginInfoExtension('plugin')
         extra_plugins_dirs = self.config['EXTRA_PLUGINS_DIRS']
+        self._loading_commands_only = commands_only
         self._plugin_places = [
-            resource_filename('nikola', 'plugins'),
+            utils.pkg_resources_path('nikola', 'plugins'),
             os.path.expanduser(os.path.join('~', '.nikola', 'plugins')),
             os.path.join(os.getcwd(), 'plugins'),
         ] + [path for path in extra_plugins_dirs if path]
+        self._plugin_places = [pathlib.Path(p) for p in self._plugin_places]
+
+        self.plugin_manager = PluginManager(plugin_places=self._plugin_places)
 
         compilers = defaultdict(set)
         # Also add aliases for combinations with TRANSLATIONS_PATTERN
@@ -1069,41 +1055,40 @@ class Nikola(object):
         self.disabled_compilers = {}
         self.disabled_compiler_extensions = defaultdict(list)
 
-        self.plugin_manager.getPluginLocator().setPluginPlaces(self._plugin_places)
-        self.plugin_manager.locatePlugins()
-        bad_candidates = set([])
-        if not load_all:
-            for p in self.plugin_manager._candidates:
+        candidates = self.plugin_manager.locate_plugins()
+
+        if load_all:
+            good_candidates = set(candidates)
+        else:
+            good_candidates = set()
+            for p in candidates:
                 if commands_only:
-                    if p[-1].details.has_option('Nikola', 'PluginCategory'):
-                        # FIXME TemplateSystem should not be needed
-                        if p[-1].details.get('Nikola', 'PluginCategory') not in {'Command', 'Template'}:
-                            bad_candidates.add(p)
-                    else:
-                        bad_candidates.add(p)
+                    if p.category != 'Command':
+                        continue
                 elif self.configured:  # Not commands-only, and configured
                     # Remove blacklisted plugins
-                    if p[-1].name in self.config['DISABLED_PLUGINS']:
-                        bad_candidates.add(p)
-                        utils.LOGGER.debug('Not loading disabled plugin {}', p[-1].name)
-                    # Remove compilers we don't use
-                    if p[-1].details.has_option('Nikola', 'PluginCategory') and p[-1].details.get('Nikola', 'PluginCategory') in ('Compiler', 'PageCompiler'):
-                        bad_candidates.add(p)
-                        self.disabled_compilers[p[-1].name] = p
+                    if p.name in self.config['DISABLED_PLUGINS']:
+                        utils.LOGGER.debug('Not loading disabled plugin {}', p.name)
+                        continue
+                    # Remove compilers - will be loaded later based on usage
+                    if p.category == "PageCompiler":
+                        self.disabled_compilers[p.name] = p
+                        continue
                     # Remove compiler extensions we don't need
-                    if p[-1].details.has_option('Nikola', 'compiler') and p[-1].details.get('Nikola', 'compiler') in self.disabled_compilers:
-                        bad_candidates.add(p)
-                        self.disabled_compiler_extensions[p[-1].details.get('Nikola', 'compiler')].append(p)
-            self.plugin_manager._candidates = list(set(self.plugin_manager._candidates) - bad_candidates)
+                    if p.compiler and p.compiler in self.disabled_compilers:
+                        self.disabled_compiler_extensions[p.compiler].append(p)
+                        continue
+                good_candidates.add(p)
 
-        self.plugin_manager._candidates = self._filter_duplicate_plugins(self.plugin_manager._candidates)
-        self.plugin_manager.loadPlugins()
+        good_candidates = self._filter_duplicate_plugins(good_candidates)
+        self.plugin_manager.load_plugins(good_candidates)
 
         # Search for compiler plugins which we disabled but shouldn't have
         self._activate_plugins_of_category("PostScanner")
         if not load_all:
             file_extensions = set()
-            for post_scanner in [p.plugin_object for p in self.plugin_manager.getPluginsOfCategory('PostScanner')]:
+            for post_scanner in [p.plugin_object for p in self.plugin_manager.get_plugins_of_category('PostScanner')]:
+                post_scanner: PostScanner
                 exts = post_scanner.supported_extensions()
                 if exts is not None:
                     file_extensions.update(exts)
@@ -1122,13 +1107,13 @@ class Nikola(object):
                     for p in self.disabled_compiler_extensions.pop(k, []):
                         to_add.append(p)
             for _, p in self.disabled_compilers.items():
-                utils.LOGGER.debug('Not loading unneeded compiler {}', p[-1].name)
+                utils.LOGGER.debug('Not loading unneeded compiler %s', p.name)
             for _, plugins in self.disabled_compiler_extensions.items():
                 for p in plugins:
-                    utils.LOGGER.debug('Not loading compiler extension {}', p[-1].name)
+                    utils.LOGGER.debug('Not loading compiler extension %s', p.name)
             if to_add:
-                self.plugin_manager._candidates = self._filter_duplicate_plugins(to_add)
-                self.plugin_manager.loadPlugins()
+                extra_candidates = self._filter_duplicate_plugins(to_add)
+                self.plugin_manager.load_plugins(extra_candidates)
 
         # Jupyter theme configuration.  If a website has ipynb enabled in post_pages
         # we should enable the Jupyter CSS (leaving that up to the theme itself).
@@ -1141,7 +1126,8 @@ class Nikola(object):
 
         self._activate_plugins_of_category("Taxonomy")
         self.taxonomy_plugins = {}
-        for taxonomy in [p.plugin_object for p in self.plugin_manager.getPluginsOfCategory('Taxonomy')]:
+        for taxonomy in [p.plugin_object for p in self.plugin_manager.get_plugins_of_category('Taxonomy')]:
+            taxonomy: Taxonomy
             if not taxonomy.is_enabled():
                 continue
             if taxonomy.classification_name in self.taxonomy_plugins:
@@ -1167,10 +1153,9 @@ class Nikola(object):
 
         # Activate all required compiler plugins
         self.compiler_extensions = self._activate_plugins_of_category("CompilerExtension")
-        for plugin_info in self.plugin_manager.getPluginsOfCategory("PageCompiler"):
+        for plugin_info in self.plugin_manager.get_plugins_of_category("PageCompiler"):
             if plugin_info.name in self.config["COMPILERS"].keys():
-                self.plugin_manager.activatePluginByName(plugin_info.name)
-                plugin_info.plugin_object.set_site(self)
+                self._activate_plugin(plugin_info)
 
         # Activate shortcode plugins
         self._activate_plugins_of_category("ShortcodePlugin")
@@ -1179,10 +1164,8 @@ class Nikola(object):
         self.compilers = {}
         self.inverse_compilers = {}
 
-        for plugin_info in self.plugin_manager.getPluginsOfCategory(
-                "PageCompiler"):
-            self.compilers[plugin_info.name] = \
-                plugin_info.plugin_object
+        for plugin_info in self.plugin_manager.get_plugins_of_category("PageCompiler"):
+            self.compilers[plugin_info.name] = plugin_info.plugin_object
 
         # Load comment systems, config plugins and register templated shortcodes
         self._activate_plugins_of_category("CommentSystem")
@@ -1325,13 +1308,26 @@ class Nikola(object):
         self.ALL_PAGE_DEPS['index_read_more_link'] = self.config.get('INDEX_READ_MORE_LINK')
         self.ALL_PAGE_DEPS['feed_read_more_link'] = self.config.get('FEED_READ_MORE_LINK')
 
-    def _activate_plugins_of_category(self, category):
+    def _activate_plugin(self, plugin_info: PluginInfo) -> None:
+        plugin_info.plugin_object.set_site(self)
+
+        if plugin_info.category == "TemplateSystem" or self._loading_commands_only:
+            return
+
+        templates_directory_candidates = [
+            plugin_info.source_dir / "templates" / self.template_system.name,
+            plugin_info.source_dir / plugin_info.module_name / "templates" / self.template_system.name
+        ]
+        for candidate in templates_directory_candidates:
+            if candidate.exists() and candidate.is_dir():
+                self.template_system.inject_directory(str(candidate))
+
+    def _activate_plugins_of_category(self, category) -> typing.List[PluginInfo]:
         """Activate all the plugins of a given category and return them."""
         # this code duplicated in tests/base.py
         plugins = []
-        for plugin_info in self.plugin_manager.getPluginsOfCategory(category):
-            self.plugin_manager.activatePluginByName(plugin_info.name)
-            plugin_info.plugin_object.set_site(self)
+        for plugin_info in self.plugin_manager.get_plugins_of_category(category):
+            self._activate_plugin(plugin_info)
             plugins.append(plugin_info)
         return plugins
 
@@ -1395,13 +1391,12 @@ class Nikola(object):
         if self._template_system is None:
             # Load template plugin
             template_sys_name = utils.get_template_engine(self.THEMES)
-            pi = self.plugin_manager.getPluginByName(
-                template_sys_name, "TemplateSystem")
+            pi = self.plugin_manager.get_plugin_by_name(template_sys_name, "TemplateSystem")
             if pi is None:
                 sys.stderr.write("Error loading {0} template system "
                                  "plugin\n".format(template_sys_name))
                 sys.exit(1)
-            self._template_system = pi.plugin_object
+            self._template_system = typing.cast(TemplateSystem, pi.plugin_object)
             lookup_dirs = ['templates'] + [os.path.join(utils.get_theme_path(name), "templates")
                                            for name in self.THEMES]
             self._template_system.set_directories(lookup_dirs,
@@ -1698,7 +1693,7 @@ class Nikola(object):
         """
         self.register_shortcode('template', self._template_shortcode_handler)
 
-        builtin_sc_dir = resource_filename(
+        builtin_sc_dir = utils.pkg_resources_path(
             'nikola',
             os.path.join('data', 'shortcodes', utils.get_template_engine(self.THEMES)))
 
@@ -1921,7 +1916,8 @@ class Nikola(object):
             else:
                 return link
         else:
-            return os.path.join(*path)
+            # URLs should always use forward slash separators, even on Windows
+            return str(pathlib.PurePosixPath(*path))
 
     def post_path(self, name, lang):
         """Link to the destination of an element in the POSTS/PAGES settings.
@@ -2069,7 +2065,7 @@ class Nikola(object):
                         yield ft
 
         task_dep = []
-        for pluginInfo in self.plugin_manager.getPluginsOfCategory(plugin_category):
+        for pluginInfo in self.plugin_manager.get_plugins_of_category(plugin_category):
             for task in flatten(pluginInfo.plugin_object.gen_tasks()):
                 if 'basename' not in task:
                     raise ValueError("Task {0} does not have a basename".format(task))
@@ -2078,7 +2074,7 @@ class Nikola(object):
                     task['task_dep'] = []
                 task['task_dep'].extend(self.injected_deps[task['basename']])
                 yield task
-                for multi in self.plugin_manager.getPluginsOfCategory("TaskMultiplier"):
+                for multi in self.plugin_manager.get_plugins_of_category("TaskMultiplier"):
                     flag = False
                     for task in multi.plugin_object.process(task, name):
                         flag = True
@@ -2187,7 +2183,7 @@ class Nikola(object):
         self.timeline = []
         self.pages = []
 
-        for p in sorted(self.plugin_manager.getPluginsOfCategory('PostScanner'), key=operator.attrgetter('name')):
+        for p in sorted(self.plugin_manager.get_plugins_of_category('PostScanner'), key=operator.attrgetter('name')):
             try:
                 timeline = p.plugin_object.scan()
             except Exception:

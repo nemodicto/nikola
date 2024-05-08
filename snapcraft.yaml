@@ -1,5 +1,5 @@
 name: nikola
-version: 8.2.0
+version: 8.3.1
 summary: A static website generator
 description: A static website generator
 confinement: strict
@@ -40,7 +40,6 @@ parts:
             - mako
             - unidecode
             - lxml
-            - Yapsy
             - PyRSS2Gen
             - blinker
             - setuptools

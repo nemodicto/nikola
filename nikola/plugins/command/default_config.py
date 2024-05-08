@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2022 Roberto Alsina and others.
+# Copyright © 2012-2024 Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -28,7 +28,6 @@
 
 import sys
 
-import nikola.plugins.command.init
 from nikola.plugin_categories import Command
 from nikola.utils import get_logger
 
@@ -48,7 +47,10 @@ class CommandShowConfig(Command):
 
     def _execute(self, options=None, args=None):
         """Show the default configuration."""
+        init_plugin = self.site.plugin_manager.get_plugin_by_name("init", "Command").plugin_object
+        config = init_plugin.create_configuration_to_string()
+
         try:
-            print(nikola.plugins.command.init.CommandInit.create_configuration_to_string())
+            print(config)
         except Exception:
-            sys.stdout.buffer.write(nikola.plugins.command.init.CommandInit.create_configuration_to_string().encode('utf-8'))
+            sys.stdout.buffer.write(config.encode('utf-8'))

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2022 Chris Warrick, Roberto Alsina and others.
+# Copyright © 2012-2024 Chris Warrick, Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -35,13 +35,14 @@ import stat
 import subprocess
 import sys
 import typing
+import urllib.parse
 import webbrowser
+from pathlib import Path
 
 import blinker
-import pkg_resources
 
 from nikola.plugin_categories import Command
-from nikola.utils import dns_sd, req_missing, get_theme_path, makedirs
+from nikola.utils import dns_sd, req_missing, get_theme_path, makedirs, pkg_resources_path
 
 try:
     import aiohttp
@@ -56,15 +57,25 @@ except ImportError:
 
 try:
     from watchdog.observers import Observer
+    from watchdog.observers.polling import PollingObserver
 except ImportError:
     Observer = None
+    PollingObserver = None
 
 LRJS_PATH = os.path.join(os.path.dirname(__file__), 'livereload.js')
 REBUILDING_REFRESH_DELAY = 0.35
 IDLE_REFRESH_DELAY = 0.05
 
-if sys.platform == 'win32':
-    asyncio.set_event_loop(asyncio.ProactorEventLoop())
+
+def base_path_from_siteuri(siteuri: str) -> str:
+    """Extract the path part from a URI such as site['SITE_URL'].
+
+    The path never ends with a "/". (If only "/" is intended, it is empty.)
+    """
+    path = urllib.parse.urlsplit(siteuri).path
+    if path.endswith("/"):
+        path = path[:-1]
+    return path
 
 
 class CommandAuto(Command):
@@ -150,6 +161,16 @@ class CommandAuto(Command):
             'type': str,
             'help': "Database backend ('dbm', 'json', 'sqlite3')",
             'section': 'Arguments passed to `nikola build`'
+        },
+        {
+            # We might be able to improve on this
+            # if and when https://github.com/gorakhargosh/watchdog/issues/365
+            # is ever fixed.
+            'name': 'poll',
+            'long': 'poll',
+            'default': False,
+            'type': bool,
+            'help': 'Use polling to notice changes behind symbolic links. This may reduce performance.'
         }
     ]
 
@@ -211,7 +232,7 @@ class CommandAuto(Command):
             watched.add(item)
         watched |= self.site.registered_auto_watched_folders
         # Nikola itself (useful for developers)
-        watched.add(pkg_resources.resource_filename('nikola', ''))
+        watched.add(pkg_resources_path('nikola', ''))
 
         out_folder = self.site.config['OUTPUT_FOLDER']
         if not os.path.exists(out_folder):
@@ -239,13 +260,15 @@ class CommandAuto(Command):
         # Server can be disabled (Issue #1883)
         self.has_server = not options['no-server']
 
+        base_path = base_path_from_siteuri(self.site.config['SITE_URL'])
+
         if self.has_server:
-            loop.run_until_complete(self.set_up_server(host, port, out_folder))
+            loop.run_until_complete(self.set_up_server(host, port, base_path, out_folder))
 
         # Run an initial build so we are up-to-date. The server is running, but we are not watching yet.
         loop.run_until_complete(self.run_initial_rebuild())
 
-        self.wd_observer = Observer()
+        self.wd_observer = Observer() if not options['poll'] else PollingObserver()
         # Watch output folders and trigger reloads
         if self.has_server:
             self.wd_observer.schedule(NikolaEventHandler(self.reload_page, loop), out_folder, recursive=True)
@@ -261,27 +284,18 @@ class CommandAuto(Command):
         self.wd_observer.schedule(ConfigEventHandler(_conf_fn, self.queue_rebuild, loop), _conf_dn, recursive=False)
         self.wd_observer.start()
 
-        win_sleeper = None
-        # https://bugs.python.org/issue23057 (fixed in Python 3.8)
-        if sys.platform == 'win32' and sys.version_info < (3, 8):
-            win_sleeper = asyncio.ensure_future(windows_ctrlc_workaround())
-
         if not self.has_server:
             self.logger.info("Watching for changes...")
             # Run the event loop forever (no server mode).
             try:
                 # Run rebuild queue
                 loop.run_until_complete(self.run_rebuild_queue())
-
                 loop.run_forever()
             except KeyboardInterrupt:
                 pass
             finally:
-                if win_sleeper:
-                    win_sleeper.cancel()
                 self.wd_observer.stop()
                 self.wd_observer.join()
-            loop.close()
             return
 
         if options['ipv6'] or '::' in host:
@@ -293,9 +307,12 @@ class CommandAuto(Command):
         if browser:
             # Some browsers fail to load 0.0.0.0 (Issue #2755)
             if host == '0.0.0.0':
-                server_url = "http://127.0.0.1:{0}/".format(port)
-            self.logger.info("Opening {0} in the default web browser...".format(server_url))
-            webbrowser.open(server_url)
+                browser_url = "http://127.0.0.1:{0}/{1}".format(port, base_path.lstrip("/"))
+            else:
+                # server_url always ends with a "/":
+                browser_url = "{0}{1}".format(server_url, base_path.lstrip("/"))
+            self.logger.info("Opening {0} in the default web browser...".format(browser_url))
+            webbrowser.open(browser_url)
 
         # Run the event loop forever and handle shutdowns.
         try:
@@ -309,24 +326,25 @@ class CommandAuto(Command):
             pass
         finally:
             self.logger.info("Server is shutting down.")
-            if win_sleeper:
-                win_sleeper.cancel()
             if self.dns_sd:
                 self.dns_sd.Reset()
             rebuild_queue_fut.cancel()
             reload_queue_fut.cancel()
+
+            # Not sure why this isn't done by the web_runner.cleanup() code:
+            loop.run_until_complete(self.remove_websockets(None))
+
             loop.run_until_complete(self.web_runner.cleanup())
             self.wd_observer.stop()
             self.wd_observer.join()
-        loop.close()
 
-    async def set_up_server(self, host: str, port: int, out_folder: str) -> None:
+    async def set_up_server(self, host: str, port: int, base_path: str, out_folder: str) -> None:
         """Set up aiohttp server and start it."""
         webapp = web.Application()
         webapp.router.add_get('/livereload.js', self.serve_livereload_js)
         webapp.router.add_get('/robots.txt', self.serve_robots_txt)
         webapp.router.add_route('*', '/livereload', self.websocket_handler)
-        resource = IndexHtmlStaticResource(True, self.snippet, '', out_folder)
+        resource = IndexHtmlStaticResource(True, self.snippet, base_path, out_folder)
         webapp.router.register_resource(resource)
         webapp.on_shutdown.append(self.remove_websockets)
 
@@ -465,7 +483,7 @@ class CommandAuto(Command):
 
         return ws
 
-    async def remove_websockets(self, app) -> None:
+    async def remove_websockets(self, _app) -> None:
         """Remove all websockets."""
         for ws in self.sockets:
             await ws.close()
@@ -495,13 +513,6 @@ class CommandAuto(Command):
             self.sockets.remove(ws)
 
 
-async def windows_ctrlc_workaround() -> None:
-    """Work around bpo-23057."""
-    # https://bugs.python.org/issue23057
-    while True:
-        await asyncio.sleep(1)
-
-
 class IndexHtmlStaticResource(StaticResource):
     """A StaticResource implementation that serves /index.html in directory roots."""
 
@@ -522,8 +533,13 @@ class IndexHtmlStaticResource(StaticResource):
     async def handle_file(self, request: 'web.Request', filename: str, from_index=None) -> 'web.Response':
         """Handle file requests."""
         try:
-            filepath = self._directory.joinpath(filename).resolve()
-            if not self._follow_symlinks:
+            unresolved_path = self._directory.joinpath(filename)
+            if self._follow_symlinks:
+                normalized_path = Path(os.path.normpath(unresolved_path))
+                normalized_path.relative_to(self._directory)
+                filepath = normalized_path.resolve()
+            else:
+                filepath = unresolved_path.resolve()
                 filepath.relative_to(self._directory)
         except (ValueError, FileNotFoundError) as error:
             # relatively safe
@@ -587,13 +603,11 @@ class NikolaEventHandler:
         self.function = function
         self.loop = loop
 
-    async def on_any_event(self, event):
-        """Handle all file events."""
-        await self.function(event)
-
     def dispatch(self, event):
         """Dispatch events to handler."""
-        self.loop.call_soon_threadsafe(asyncio.ensure_future, self.on_any_event(event))
+        if event.event_type in {"opened", "closed"}:
+            return
+        self.loop.call_soon_threadsafe(asyncio.ensure_future, self.function(event))
 
 
 class ConfigEventHandler(NikolaEventHandler):
@@ -601,11 +615,10 @@ class ConfigEventHandler(NikolaEventHandler):
 
     def __init__(self, configuration_filename, function, loop):
         """Initialize the handler."""
+        super().__init__(function, loop)
         self.configuration_filename = configuration_filename
-        self.function = function
-        self.loop = loop
 
-    async def on_any_event(self, event):
+    def dispatch(self, event):
         """Handle file events if they concern the configuration file."""
-        if event._src_path == self.configuration_filename:
-            await self.function(event)
+        if event.src_path == self.configuration_filename:
+            super().dispatch(event)

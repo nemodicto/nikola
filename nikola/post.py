@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2022 Roberto Alsina and others.
+# Copyright © 2012-2024 Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -324,6 +324,7 @@ class Post(object):
         for lang in self.translations:
             if self.meta[lang].get('data') is not None:
                 self.data[lang] = utils.load_data(self.meta[lang]['data'])
+                self.register_depfile(self.meta[lang]['data'], lang=lang)
 
     def _load_translated_metadata(self, default_metadata):
         """Load metadata from all translation sources."""
@@ -349,8 +350,8 @@ class Post(object):
             if self.config['__invariant__']:
                 default_metadata['date'] = datetime.datetime(2013, 12, 31, 23, 59, 59, tzinfo=self.config['__tzinfo__'])
             else:
-                default_metadata['date'] = datetime.datetime.utcfromtimestamp(
-                    os.stat(self.source_path).st_ctime).replace(tzinfo=dateutil.tz.tzutc()).astimezone(self.config['__tzinfo__'])
+                default_metadata['date'] = datetime.datetime.fromtimestamp(
+                    os.stat(self.source_path).st_ctime, dateutil.tz.tzutc()).astimezone(self.config['__tzinfo__'])
 
         # If time zone is set, build localized datetime.
         try:
@@ -1212,12 +1213,12 @@ def get_meta(post, lang):
 
     if lang is None:
         # Only perform these checks for the default language
-        if 'slug' not in meta:
+        if 'slug' not in meta or not meta['slug']:
             # If no slug is found in the metadata use the filename
             meta['slug'] = slugify(os.path.splitext(
                 os.path.basename(post.source_path))[0], post.default_lang)
 
-        if 'title' not in meta:
+        if 'title' not in meta or not meta['title']:
             # If no title is found, use the filename without extension
             meta['title'] = os.path.splitext(
                 os.path.basename(post.source_path))[0]

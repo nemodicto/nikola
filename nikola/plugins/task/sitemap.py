@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2022 Roberto Alsina and others.
+# Copyright © 2012-2024 Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -309,7 +309,7 @@ class Sitemap(LateTask):
             # RFC 3339 (web ISO 8601 profile) represented in UTC with Zulu
             # zone desgignator as recommeded for sitemaps. Second and
             # microsecond precision is stripped for compatibility.
-            lastmod = datetime.datetime.utcfromtimestamp(os.stat(p).st_mtime).replace(tzinfo=dateutil.tz.gettz('UTC'), second=0, microsecond=0).isoformat().replace('+00:00', 'Z')
+            lastmod = datetime.datetime.fromtimestamp(os.stat(p).st_mtime, dateutil.tz.tzutc()).replace(second=0, microsecond=0).isoformat().replace('+00:00', 'Z')
             return lastmod
 
 

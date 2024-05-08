@@ -4,9 +4,134 @@ New in master
 Features
 --------
 
-* Gallery index pages support the `status` flag (Issue #3598)
+Bugfixes
+--------
+
+* Restore `annotation_helper.tmpl` with dummy content - fix themes still mentioning it
+  (Issue #3764, #3773)
+
+New in v8.3.1
+=============
+
+Features
+--------
+
+* Support passing ``--poll`` to ``nikola auto`` to better deal with symlink farms.
+
+Bugfixes
+--------
+
+* Remove insecure HTTP fallback from ``nikola plugin``
+* Fix the ``nikola plugin`` command not working (Issue #3736, #3737)
+* Fix ``nikola new_post --available-formats`` crashing with TypeError
+  (Issue #3750)
+* Fix the new plugin manager not loading plugins if the plugin folder is a symlink (Issue #3741)
+* Fix the ``nikola plugin`` command not working (Issue #3736)
+* Remove no longer used leftovers of annotations support (Issue #3764)
+
+Other
+-----
+
+* Nikola now requires Python 3.8 or newer.
+* Nikola has adopted a policy for Python version support,
+  promising support for versions supported by the Python core team,
+  Ubuntu LTS, or Debian stable, and taking into consideration
+  Debian oldstable and PyPy.
+* Remove polyfill from `polyfill.io`.
+
+New in v8.3.0
+=============
+
+Features
+--------
+
+* Implement a new plugin manager from scratch to replace Yapsy,
+  which does not work on Python 3.12 due to Python 3.12 carelessly
+  removing parts of the standard library (Issue #3719)
+* Support for Discourse as comment system (Issue #3689)
+
+Bugfixes
+--------
+
+* Fix loading of templates from plugins with ``__init__.py`` files
+  (Issue #3725)
+* Fix margins of paragraphs at the end of sections (Issue #3704)
+* Ignore ``.DS_Store`` files in listing indexes (Issue #3698)
+* Fix baguetteBox.js invoking in the base theme (Issue #3687)
+* Fix development (preview) server ``nikola auto``
+  for non-root SITE_URL, in particular when URL_TYPE is full_path.
+  (Issue #3715)
+
+For plugin developers
+---------------------
+
+Nikola now requires the ``.plugin`` file to contain a ``[Nikola]``
+section with a ``PluginCategory`` entry set to the name of the plugin
+category class. This was already required by ``plugins.getnikola.com``,
+but you may have custom plugins that don’t have this set.
+
+New in v8.2.4
+=============
+
+Features
+--------
+
+* Add a ``-q``, ``--ignore-query-strings`` option to ignore query strings
+  for internal links, allowing their use for cache busting
+* Update reST stylesheets (Issue #3657)
+* Add a ``--timeout`` parameter to the ``check`` plugin, defaulting to
+  30s. (Issue #3643)
+* GZIP compression is now deterministic for automatic deploys (Issue #3650)
+
+Bugfixes
+--------
+
+* Fix failures to build with a "Document is empty" error in default themes
+  (Issue #3679)
+* Fix ``PAGE_INDEX`` skipping generation when there exists a conflicting post
+* Fix RSS generation of galleries containing WebP images, which caused
+  an unhandled exception due to not having a known MIME type (Issue #3671)
+* Fix ``auto`` command infinite loop (Issue #3677)
+* Fix API URL in CSS and JS minifiers (Issue #3658)
+* Fix ``:align: center`` for images in reST (Issue #3657)
+* ``GZIP_COMMAND`` parsing on ``win32`` platforms (Issue #3649)
+
+New in v8.2.3
+=============
+
+Bugfixes
+--------
+
+* Compatibility with Markdown 3.4.0 (Issue #3635)
+* Find substring in string instead of using `contains` in utils
+* Don't add semicolon in docinfo fields via CSS (caused duplicated
+  semicolons)
+
+Nikola now requires Python 3.7 or newer.
+
+New in v8.2.2
+=============
+
+* Compatibility with Pygments 2.12.0 (Issue #3617, #3618)
+
+New in v8.2.1
+=============
+
+Features
+--------
+
+* Add ``emphasize_lines`` directive to code blocks (Issue #3607)
+* Gallery index pages support the ``status`` flag (Issue #3598)
 * Add ``start_at`` option to youtube directive (Issue #3603)
 
+Bugfixes
+--------
+
+* Add data files to dependency file (Issue #3608)
+* Compatibility with doit 0.36.0 (Issue #3612)
+
+Note: ``nikola doit_auto`` is not available if using ``doit>=0.36.0``.
+You can still use ``nikola auto``.
 
 New in v8.2.0
 =============

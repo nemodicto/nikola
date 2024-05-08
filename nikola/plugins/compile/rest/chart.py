@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2022 Roberto Alsina and others.
+# Copyright © 2012-2024 Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -153,7 +153,7 @@ class Chart(Directive):
     def run(self):
         """Run the directive."""
         self.options['site'] = None
-        html = _site.plugin_manager.getPluginByName(
+        html = _site.plugin_manager.get_plugin_by_name(
             'chart', 'ShortcodePlugin').plugin_object.handler(
                 self.arguments[0],
                 data='\n'.join(self.content),

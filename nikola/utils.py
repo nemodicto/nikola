@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2022 Roberto Alsina and others.
+# Copyright © 2012-2024 Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -49,7 +49,7 @@ from unicodedata import normalize as unicodenormalize
 from urllib.parse import quote as urlquote
 from urllib.parse import unquote as urlunquote
 from urllib.parse import urlparse, urlunparse
-from zipfile import ZipFile as zipf
+from zipfile import ZipFile
 
 import babel.dates
 import dateutil.parser
@@ -60,8 +60,8 @@ import PyRSS2Gen as rss
 from blinker import signal
 from doit import tools
 from doit.cmdparse import CmdParse
-from pkg_resources import resource_filename
 from nikola.packages.pygments_better_html import BetterHtmlFormatter
+from typing import List
 from unidecode import unidecode
 
 # Renames
@@ -69,6 +69,11 @@ from nikola import DEBUG  # NOQA
 from .log import LOGGER, get_logger  # NOQA
 from .hierarchy_utils import TreeNode, clone_treenode, flatten_tree_structure, sort_classifications
 from .hierarchy_utils import join_hierarchical_category_path, parse_escaped_hierarchical_category_name
+
+if sys.version_info.minor <= 8:
+    from pkg_resources import resource_filename
+else:
+    from importlib import resources
 
 try:
     import toml
@@ -576,6 +581,14 @@ class config_changed(tools.config_changed):
                                                            sort_keys=True))
 
 
+def pkg_resources_path(package, resource):
+    """Return path to a resource from the package with the given name."""
+    if sys.version_info.minor <= 8:
+        return resource_filename(package, resource)
+    else:
+        return str(resources.files(package).joinpath(resource))
+
+
 def get_theme_path_real(theme, themes_dirs):
     """Return the path where the given theme's files are located.
 
@@ -585,7 +598,7 @@ def get_theme_path_real(theme, themes_dirs):
         dir_name = os.path.join(themes_dir, theme)
         if os.path.isdir(dir_name):
             return dir_name
-    dir_name = resource_filename('nikola', os.path.join('data', 'themes', theme))
+    dir_name = pkg_resources_path('nikola', os.path.join('data', 'themes', theme))
     if os.path.isdir(dir_name):
         return dir_name
     raise Exception("Can't find theme '{0}'".format(theme))
@@ -668,11 +681,9 @@ def html_tostring_fragment(document):
     for start in start_fragments:
         if doc.startswith(start):
             doc = doc[len(start):].strip()
-            print(repr(doc))
     for end in end_fragments:
         if doc.endswith(end):
             doc = doc[:-len(end)].strip()
-            print(repr(doc))
     return doc
 
 
@@ -727,10 +738,10 @@ def load_messages(themes, translations, default_lang, themes_dirs):
                 for k, v in translation.MESSAGES.items():
                     if v:
                         messages[lang][k] = v
-                del(translation)
+                del translation
             except ImportError as orig:
                 last_exception = orig
-        del(english)
+        del english
         sys.path = oldpath
 
     if not all(found.values()):
@@ -905,20 +916,22 @@ def extract_all(zipfile, path='themes'):
     """Extract all files from a zip file."""
     pwd = os.getcwd()
     makedirs(path)
-    os.chdir(path)
-    z = zipf(zipfile)
-    namelist = z.namelist()
-    for f in namelist:
-        if f.endswith('/') and '..' in f:
-            raise UnsafeZipException('The zip file contains ".." and is '
-                                     'not safe to expand.')
-    for f in namelist:
-        if f.endswith('/'):
-            makedirs(f)
-        else:
-            z.extract(f)
-    z.close()
-    os.chdir(pwd)
+    try:
+        os.chdir(path)
+        z = ZipFile(zipfile)
+        namelist = z.namelist()
+        for f in namelist:
+            if f.endswith('/') and '..' in f:
+                raise UnsafeZipException('The zip file contains ".." and is '
+                                         'not safe to expand.')
+        for f in namelist:
+            if f.endswith('/'):
+                makedirs(f)
+            else:
+                z.extract(f)
+        z.close()
+    finally:
+        os.chdir(pwd)
 
 
 def to_datetime(value, tzinfo=None):
@@ -1689,7 +1702,7 @@ class NikolaPygmentsHTML(BetterHtmlFormatter):
         kwargs['nowrap'] = False
         super().__init__(**kwargs)
 
-    def wrap(self, source, outfile):
+    def wrap(self, source, *args):
         """Wrap the ``source``, which is a generator yielding individual lines, in custom generators."""
         style = []
         if self.prestyles:
@@ -1707,6 +1720,18 @@ class NikolaPygmentsHTML(BetterHtmlFormatter):
 
 # For consistency, override the default formatter.
 pygments.formatters._formatter_cache['HTML'] = NikolaPygmentsHTML
+pygments.formatters._formatter_cache['html'] = NikolaPygmentsHTML
+_original_find_formatter_class = pygments.formatters.find_formatter_class
+
+
+def nikola_find_formatter_class(alias):
+    """Nikola-specific version of find_formatter_class."""
+    if "html" in alias.lower():
+        return NikolaPygmentsHTML
+    return _original_find_formatter_class(alias)
+
+
+pygments.formatters.find_formatter_class = nikola_find_formatter_class
 
 
 def get_displayed_page_number(i, num_pages, site):
@@ -2005,6 +2030,33 @@ def map_metadata(meta, key, config):
     for meta_key, hook in config.get('METADATA_VALUE_MAPPING', {}).get(key, {}).items():
         if meta_key in meta:
             meta[meta_key] = hook(meta[meta_key])
+
+
+def parselinenos(spec: str, total: int) -> List[int]:
+    """Parse a line number spec.
+
+    Example: "1,2,4-6" -> [0, 1, 3, 4, 5]
+    """
+    items = list()
+    parts = spec.split(',')
+    for part in parts:
+        try:
+            begend = part.strip().split('-')
+            if ['', ''] == begend:
+                raise ValueError
+            elif len(begend) == 1:
+                items.append(int(begend[0]) - 1)
+            elif len(begend) == 2:
+                start = int(begend[0] or 1)  # left half open (cf. -10)
+                end = int(begend[1] or max(start, total))  # right half open (cf. 10-)
+                if start > end:  # invalid range (cf. 10-1)
+                    raise ValueError
+                items.extend(range(start - 1, end))
+            else:
+                raise ValueError
+        except Exception as exc:
+            raise ValueError('invalid line number spec: %r' % spec) from exc
+    return items
 
 
 class ClassificationTranslationManager(object):

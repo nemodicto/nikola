@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2022 Roberto Alsina and others.
+# Copyright © 2012-2024 Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -107,12 +107,13 @@ class Listings(Task):
         """Render pretty code listings."""
         # Things to ignore in listings
         ignored_extensions = (".pyc", ".pyo")
+        ignored_files = (".DS_Store",)
 
         def render_listing(in_name, out_name, input_folder, output_folder, folders=[], files=[]):
             needs_ipython_css = False
             if in_name and in_name.endswith('.ipynb'):
                 # Special handling: render ipynbs in listings (Issue #1900)
-                ipynb_plugin = self.site.plugin_manager.getPluginByName("ipynb", "PageCompiler")
+                ipynb_plugin = self.site.plugin_manager.get_plugin_by_name("ipynb", "PageCompiler")
                 if ipynb_plugin is None:
                     msg = "To use .ipynb files as listings, you must set up the Jupyter compiler in COMPILERS and POSTS/PAGES."
                     utils.LOGGER.error(msg)
@@ -183,7 +184,9 @@ class Listings(Task):
 
         for input_folder, output_folder in self.kw['listings_folders'].items():
             for root, dirs, files in os.walk(input_folder, followlinks=True):
-                files = [f for f in files if os.path.splitext(f)[-1] not in ignored_extensions]
+                files = [f for f in files
+                         if os.path.splitext(f)[-1] not in ignored_extensions and
+                         f not in ignored_files]
 
                 uptodate = {'c': self.site.GLOBAL_CONTEXT}
 
@@ -224,7 +227,7 @@ class Listings(Task):
                     'clean': True,
                 }, self.kw["filters"])
                 for f in files:
-                    if f == '.DS_Store':
+                    if f in ignored_files:
                         continue
                     ext = os.path.splitext(f)[-1]
                     if ext in ignored_extensions:

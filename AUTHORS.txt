@@ -3,6 +3,7 @@
 * `Alberto Berti <https://github.com/azazel75>`_
 * `Alex Popescu <https://github.com/al3xandru>`_
 * `Alex Walters <https://github.com/tritium21>`_
+* `Andreas Krüger <https://github.com/aknrdureegaesr>`_
 * `Andreas Linz <https://github.com/KLINGTdotNET>`_
 * `André Felipe Dias <https://github.com/andredias>`_
 * `Areski Belaid <https://github.com/areski>`_
@@ -13,14 +14,14 @@
 * `Boris Kaul <https://github.com/localvoid>`_
 * `Brad Miller <https://github.com/bnmnetp>`_
 * `Brandon W. Maister <https://github.com/quodlibetor>`_
-* `Bussonnier Matthias <https://gtihub.com/carreau>`_
+* `Bussonnier Matthias <https://github.com/carreau>`_
 * `Carlos Martín Sánchez <https://github.com/carlosvin>`_
 * `Carsten Grohmann <https://github.com/CarstenGrohmann>`_
 * `Casey M. Bessette <https://github.com/caseybessette>`_
 * `Chris Lee <https://github.com/clee>`_
 * `Chris Warrick <https://github.com/Kwpolska>`_
 * `Christian Lawson-Perfect <https://github.com/christianp>`_
-* `Christopher Arndt <https:/github.com/SpotlightKid>`_
+* `Christopher Arndt <https://github.com/SpotlightKid>`_
 * `Claudio Canepa <https://github.com/ccanepa>`_
 * `Clayton A. Davis <https://github.com/clayadavis>`_
 * `Damien Tournoud <https://github.com/damz>`_
@@ -29,6 +30,7 @@
 * `Daniel Devine <https://github.com/DDevine>`_
 * `Daniel F. Moisset <https://github.com/dmoisset>`_
 * `Daniel Harding <https://github.com/living180>`_
+* `Daniele Scasciafratte <https://github.com/mte90>`_
 * `dastagg <https://github.com/dastagg>`_
 * `David Barragán Merino <https://github.com/bameda>`_
 * `David Beath <https://github.com/DBeath>`_
@@ -58,6 +60,7 @@
 * `Jesper Dramsch <https://github.com/jesperdramsch>`_
 * `John Kristensen <https://github.com/jerrykan>`_
 * `Jonathon Anderson <https://github.com/anderbubble>`_
+  `Jonathan Hartley <https://github.com/tartley>`_
 * `Joshua Barratt <https://github.com/jbarratt>`_
 * `Juan Pedro Fisanotti <https://github.com/fisadev>`_
 * `Juanjo Conti <https://github.com/jjconti>`_
@@ -117,9 +120,11 @@
 * `Roman Faizullin <https://github.com/faizrr>`_
 * `Roman Imankulov <https://github.com/imankulov>`_
 * `Santiago Pestarini <https://github.com/quijot>`_
+* `Santiago Fraire Willemoes <https://github.com/Woile>`_
 * `Sean Pue <https://github.com/seanpue>`_
 * `Simon van der Veldt <https://github.com/simonvanderveldt>`_
 * `Stefan Näwe <https://github.com/snaewe>`_
+* `Stefano Rivera <https://github.com/stefanor>`_
 * `Stephan Fitzpatrick <https://github.com/knowsuchagency>`_
 * `Sukil Etxenike <https://github.com/sukiletxe>`_
 * `Ted Timmons <https://github.com/tedder>`_

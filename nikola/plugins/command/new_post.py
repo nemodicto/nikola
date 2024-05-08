@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2022 Roberto Alsina and others.
+# Copyright © 2012-2024 Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -216,9 +216,7 @@ class CommandNewPost(Command):
     def _execute(self, options, args):
         """Create a new post or page."""
         global LOGGER
-        compiler_names = [p.name for p in
-                          self.site.plugin_manager.getPluginsOfCategory(
-                              "PageCompiler")]
+        compiler_names = [p.name for p in self.site.plugin_manager.get_plugins_of_category("PageCompiler")]
 
         if len(args) > 1:
             print(self.help())
@@ -298,7 +296,7 @@ class CommandNewPost(Command):
             self.print_compilers()
             return
 
-        compiler_plugin = self.site.plugin_manager.getPluginByName(
+        compiler_plugin = self.site.plugin_manager.get_plugin_by_name(
             content_format, "PageCompiler").plugin_object
 
         # Guess where we should put this
@@ -522,22 +520,18 @@ class CommandNewPost(Command):
                     False
                 ])
 
-        for name, (_, _, pi) in self.site.disabled_compilers.items():
-            if pi.details.has_option('Nikola', 'Friendlyname'):
-                f_name = pi.details.get('Nikola', 'Friendlyname')
-            else:
-                f_name = name
-            if name in compilers_raw:
+        for plugin in self.site.disabled_compilers.values():
+            if plugin.name in compilers_raw:
                 unused_compilers.append([
-                    name,
-                    f_name,
-                    compilers_raw[name],
+                    plugin.name,
+                    plugin.friendly_name,
+                    compilers_raw[plugin.name],
                     False
                 ])
             else:
                 disabled_compilers.append([
-                    name,
-                    f_name,
+                    plugin.name,
+                    plugin.friendly_name,
                     (),
                     False
                 ])

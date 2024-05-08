@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2022 Roberto Alsina and others.
+# Copyright © 2012-2024 Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -26,18 +26,11 @@
 
 """The main function of Nikola."""
 
-import importlib.util
-import os
-import shutil
-import sys
-import textwrap
-import traceback
-import doit.cmd_base
+from blinker import signal
 from collections import defaultdict
 
-from blinker import signal
-from doit.cmd_auto import Auto as DoitAuto
-from doit.cmd_base import TaskLoader, _wrap
+import doit.cmd_base
+from doit.cmd_base import TaskLoader2, _wrap
 from doit.cmd_clean import Clean as DoitClean
 from doit.cmd_completion import TabCompletion
 from doit.cmd_help import Help as DoitHelp
@@ -45,6 +38,13 @@ from doit.cmd_run import Run as DoitRun
 from doit.doit_cmd import DoitMain
 from doit.loader import generate_tasks
 from doit.reporter import ExecutedOnlyReporter
+
+import importlib.util
+import os
+import shutil
+import sys
+import textwrap
+import traceback
 
 from . import __version__
 from .nikola import Nikola
@@ -56,7 +56,6 @@ try:
     import readline  # NOQA
 except ImportError:
     pass  # This is only so raw_input/input does nicer things if it's available
-
 
 config = {}
 
@@ -247,31 +246,41 @@ class Clean(DoitClean):
 
 # Nikola has its own "auto" commands that uses livereload.
 # Expose original doit "auto" command as "doit_auto".
-DoitAuto.name = 'doit_auto'
+# doit_auto is not available with doit>=0.36.0.
+try:
+    from doit.cmd_auto import Auto as DoitAuto
+    DoitAuto.name = 'doit_auto'
+except ImportError:
+    DoitAuto = None
 
 
-class NikolaTaskLoader(TaskLoader):
+class NikolaTaskLoader(TaskLoader2):
     """Nikola-specific task loader."""
 
     def __init__(self, nikola, quiet=False):
         """Initialize the loader."""
+        super().__init__()
         self.nikola = nikola
         self.quiet = quiet
 
-    def load_tasks(self, cmd, opt_values, pos_args):
-        """Load Nikola tasks."""
+    def load_doit_config(self):
+        """Load doit configuration."""
         if self.quiet:
-            DOIT_CONFIG = {
+            doit_config = {
                 'verbosity': 0,
                 'reporter': 'zero',
             }
         else:
-            DOIT_CONFIG = {
+            doit_config = {
                 'reporter': ExecutedOnlyReporter,
                 'outfile': sys.stderr,
             }
-        DOIT_CONFIG['default_tasks'] = ['render_site', 'post_render']
-        DOIT_CONFIG.update(self.nikola._doit_config)
+        doit_config['default_tasks'] = ['render_site', 'post_render']
+        doit_config.update(self.nikola._doit_config)
+        return doit_config
+
+    def load_tasks(self, cmd, pos_args):
+        """Load Nikola tasks."""
         try:
             tasks = generate_tasks(
                 'render_site',
@@ -286,15 +295,17 @@ class NikolaTaskLoader(TaskLoader):
                 raise
             _print_exception()
             sys.exit(3)
-        return tasks + latetasks, DOIT_CONFIG
+        return tasks + latetasks
 
 
 class DoitNikola(DoitMain):
     """Nikola-specific implementation of DoitMain."""
 
     # overwite help command
-    DOIT_CMDS = list(DoitMain.DOIT_CMDS) + [Help, Build, Clean, DoitAuto]
+    DOIT_CMDS = list(DoitMain.DOIT_CMDS) + [Help, Build, Clean]
     TASK_LOADER = NikolaTaskLoader
+    if DoitAuto is not None:
+        DOIT_CMDS.append(DoitAuto)
 
     def __init__(self, nikola, quiet=False):
         """Initialzie DoitNikola."""

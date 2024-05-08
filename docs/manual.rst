@@ -7,7 +7,7 @@
 .. has_math: true
 .. author: The Nikola Team
 
-:Version: 8.2.0
+:Version: 8.3.1
 
 .. class:: alert alert-primary float-md-right
 
@@ -134,7 +134,7 @@ Obsolescence
     You may say those are long term issues, or that they won't matter for years. Well,
     I believe things should work forever, or as close to it as we can make them.
     Nikola's static output and its input files will work as long as you can install
-    Python 3.5 or newer under Linux, Windows, or macOS and can find a server
+    Python 3.8 or newer under Linux, Windows, or macOS and can find a server
     that sends files over HTTP. That's probably 10 or 15 years at least.
 
     Also, static sites are easily handled by the Internet Archive.
@@ -1690,10 +1690,6 @@ For Mako:
 .. code:: html
 
     % if date_fanciness != 0:
-    %if date_fanciness == 2:
-        <!-- Polyfill for relative dates in Safari -- best handled with a CDN -->
-        <script src="https://polyfill.io/v3/polyfill.js?features=Intl.RelativeTimeFormat.%7Elocale.${luxon_locales[lang]}"></script>
-    %endif
     <!-- required scripts -- best handled with bundles -->
     <script src="/assets/js/luxon.min.js"></script>
     <script src="/assets/js/fancydates.js"></script>
@@ -1712,10 +1708,6 @@ For Jinja2:
 .. code:: html
 
     {% if date_fanciness != 0 %}
-    {% if date_fanciness == 2 %}
-        <!-- Polyfill for relative dates in Safari -- best handled with a CDN -->
-        <script src="https://polyfill.io/v3/polyfill.js?features=Intl.RelativeTimeFormat.%7Elocale.{{ luxon_locales[lang] }}"></script>
-    {% endif %}
     <!-- required scripts -- best handled with bundles -->
     <script src="/assets/js/luxon.min.js"></script>
     <script src="/assets/js/fancydates.js"></script>
@@ -1909,6 +1901,7 @@ are probably expecting: comments.
 Nikola supports several third party comment systems:
 
 * `DISQUS <https://disqus.com>`_
+* `Discourse <https://discourse.com>`_
 * `IntenseDebate <https://www.intensedebate.com/>`_
 * `Muut (Formerly moot) <https://muut.com/>`_
 * `Facebook <https://facebook.com/>`_
@@ -1936,6 +1929,7 @@ It is also possible to use a comment system added by a plugin, see the
      Punycode (if using Internationalized Domain Names) and **have a trailing slash**,
      default ``http://localhost:8080/``). You can add custom config options via
      ``GLOBAL_CONTEXT``, e.g., ``GLOBAL_CONTEXT['isso_config'] = {"require-author": "true"}``
+   * For Discourse, it's the forum instance (must be world-accessible)  and **have a trailing slash**.
    * For Commento, it's the URL of the commento instance as required by the ``serverUrl``
      parameter in commento's documentation.
    * For Utterances, it's the **repo name** (``"org/user"``) on GitHub whose
@@ -2693,6 +2687,21 @@ for ``code`` directive are provided: ``code-block`` and ``sourcecode``:
        :number-lines:
 
        print("Our virtues and our failings are inseparable")
+
+Certain lines might be highlighted via the ``emphasize-lines`` directive:
+
+.. code:: restructuredtext
+
+    .. code-block:: python
+        :emphasize-lines: 3,5
+
+        def some_function():
+            interesting = False
+            print('This line is highlighted.')
+            print('This one is not...')
+            print('...but this one is.')
+
+Line ranges are also supported, such as ``:emphasize-lines: 1-3,5-9,15``.
 
 Listing
 ~~~~~~~

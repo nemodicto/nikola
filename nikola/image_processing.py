@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2014 Roberto Alsina and others.
+# Copyright © 2012-2024 Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -145,7 +145,7 @@ class ImageProcessor(object):
                 if bigger_panoramas and w > 3 * h:
                     size = min(w, max_size * 4), min(w, max_size * 4)
             try:
-                im.thumbnail(size, Image.ANTIALIAS)
+                im.thumbnail(size, Image.Resampling.LANCZOS)
                 save_args = {}
                 if icc_profile:
                     save_args['icc_profile'] = icc_profile
